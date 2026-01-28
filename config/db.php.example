@@ -1,0 +1,20 @@
+<?php
+// config/db.php
+date_default_timezone_set('Europe/Madrid');
+
+$host = 'localhost';
+$port = '3306';
+$dbname = 'mundial_db';
+$username = 'usuario_db'; 
+$password = 'password_secreta'; 
+
+try {
+    // CAMBIAR 'charset=utf8' a 'charset=utf8mb4'
+    $dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=utf8mb4";
+    
+    $pdo = new PDO($dsn, $username, $password);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (PDOException $e) {
+    die("Error de conexión: " . $e->getMessage());
+}
+?>
