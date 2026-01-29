@@ -12,6 +12,15 @@ $user_id = $_SESSION['user_id'];
 $success = '';
 $error = '';
 
+// --- NUEVO: COMPROBAR DISPONIBILIDAD DE DUELOS POR FASE ---
+// Queremos saber en qué fases el usuario YA HA LANZADO un reto
+$stmt_my_phases = $pdo->prepare("SELECT DISTINCT m.phase 
+                                 FROM match_challenges mc 
+                                 JOIN matches m ON mc.match_id = m.id 
+                                 WHERE mc.challenger_user_id = ?");
+$stmt_my_phases->execute([$user_id]);
+$my_used_phases = $stmt_my_phases->fetchAll(PDO::FETCH_COLUMN);
+
 // 1. Obtener datos para los SELECTS
 $stmt_matches = $pdo->query("SELECT 
     m.id, m.match_date, m.phase, t1.name AS home, t2.name AS away, t1.flag AS home_flag, t2.flag AS away_flag
@@ -21,6 +30,11 @@ JOIN teams t2 ON m.team_away_id = t2.id
 WHERE m.status = 'scheduled' AND m.phase != 'final' AND m.phase != 'third_place'
 ORDER BY m.match_date ASC");
 $matches_list = $stmt_matches->fetchAll(PDO::FETCH_ASSOC);
+
+// Filtrar partidos: solo mostrar partidos de fases donde el usuario aún no haya retado
+$available_matches = array_filter($matches_list, function($m) use ($my_used_phases) {
+    return !in_array($m['phase'], $my_used_phases);
+});
 
 $stmt_users = $pdo->prepare("SELECT id, nombre FROM users WHERE id != ? AND role = 'user' ORDER BY nombre ASC");
 $stmt_users->execute([$user_id]);
@@ -60,14 +74,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $sql = "INSERT INTO match_challenges (match_id, challenger_user_id, challenged_user_id) VALUES (?, ?, ?)";
                     $pdo->prepare($sql)->execute([$match_id, $user_id, $challenged_user_id]);
-                    $success = "¡Reto lanzado! Prepárate para el duelo.";
+                    
+                    // Recargar página para actualizar estados
+                    header("Location: challenge.php?msg=success");
+                    exit;
                 }
             }
         } catch (PDOException $e) { $error = "Error: " . $e->getMessage(); }
     }
 }
 
-// 3. Desafíos Pendientes (Donde YO reto y donde ME retan)
+if(isset($_GET['msg']) && $_GET['msg'] == 'success') $success = "¡Reto lanzado! Prepárate para el duelo.";
+
+// 3. Desafíos Pendientes
 $stmt_pending = $pdo->prepare("SELECT 
     mc.id, m.match_date, m.phase, t1.name AS home, t2.name AS away, 
     t1.flag AS home_flag, t2.flag AS away_flag, 
@@ -97,10 +116,9 @@ $all_pending = $stmt_pending->fetchAll(PDO::FETCH_ASSOC);
         .arena-header { background: linear-gradient(135deg, #6610f2 0%, #0d6efd 100%); color: white; border-radius: 20px; padding: 40px; margin-bottom: 40px; position: relative; overflow: hidden; }
         .arena-header i { position: absolute; right: -20px; bottom: -20px; font-size: 15rem; opacity: 0.1; }
         .challenge-card { border: none; border-radius: 15px; background: white; transition: transform 0.2s; }
-        .challenge-card:hover { transform: scale(1.01); }
-        .vs-circle { width: 40px; height: 40px; background: #f8f9fa; border: 2px solid #dee2e6; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.8rem; margin: 0 10px; }
         .flag-img { width: 30px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .badge-phase { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 1px; }
+        .disabled-form { opacity: 0.6; pointer-events: none; filter: grayscale(1); }
     </style>
 </head>
 <body class="bg-light">
@@ -114,7 +132,7 @@ $all_pending = $stmt_pending->fetchAll(PDO::FETCH_ASSOC);
             <div class="col-md-8">
                 <span class="badge badge-phase mb-2">Competición Directa</span>
                 <h1 class="display-4 fw-bold">Arena de Duelos</h1>
-                <p class="lead opacity-75">Roba los puntos de tus rivales. Un solo duelo por fase. ¡Elige bien a tu víctima!</p>
+                <p class="lead opacity-75">Roba los puntos de tus rivales. <b>Un solo duelo por fase</b>.</p>
             </div>
         </div>
         <i class="bi bi-swords"></i>
@@ -124,42 +142,49 @@ $all_pending = $stmt_pending->fetchAll(PDO::FETCH_ASSOC);
         <div class="col-lg-4">
             <div class="card challenge-card shadow-sm h-100">
                 <div class="card-body p-4">
-                    <h4 class="fw-bold mb-4"><i class="bi bi-plus-circle-fill text-primary me-2"></i>Nuevo Desafío</h4>
+                    <h4 class="fw-bold mb-4"><i class="bi bi-plus-circle-fill text-primary me-2"></i>Lanzar Reto</h4>
                     
                     <?php if ($success): ?> <div class="alert alert-success border-0 shadow-sm small"><?php echo $success; ?></div> <?php endif; ?>
                     <?php if ($error): ?> <div class="alert alert-danger border-0 shadow-sm small"><?php echo $error; ?></div> <?php endif; ?>
 
-                    <form method="POST">
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold">1. Selecciona el Partido</label>
-                            <select name="match_id" id="match_id" class="form-select border-2" required>
-                                <option value="">-- Ver partidos --</option>
-                                <?php foreach($matches_list as $match): ?>
-                                    <option value="<?php echo $match['id']; ?>" 
-                                            data-home-flag="<?php echo htmlspecialchars($match['home_flag']); ?>"
-                                            data-away-flag="<?php echo htmlspecialchars($match['away_flag']); ?>">
-                                        <?php echo htmlspecialchars($match['home'] . ' vs ' . $match['away']); ?> (<?php echo $match['phase']; ?>)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
+                    <?php if (empty($available_matches)): ?>
+                        <div class="text-center py-4">
+                            <i class="bi bi-lock-fill fs-1 text-danger"></i>
+                            <p class="fw-bold mt-2">Duelos agotados</p>
+                            <p class="small text-muted">Ya has lanzado un duelo en todas las fases disponibles actualmente. ¡Espera a la siguiente fase!</p>
                         </div>
-                        <div id="match_preview" class="mb-3 d-flex align-items-center justify-content-center p-3 bg-light rounded-3 border border-dashed" style="display:none !important;">
+                    <?php else: ?>
+                        <form method="POST">
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">1. Selecciona el Partido</label>
+                                <select name="match_id" id="match_id" class="form-select border-2" required>
+                                    <option value="">-- Ver partidos disponibles --</option>
+                                    <?php foreach($available_matches as $match): ?>
+                                        <option value="<?php echo $match['id']; ?>" 
+                                                data-home-flag="<?php echo htmlspecialchars($match['home_flag']); ?>"
+                                                data-away-flag="<?php echo htmlspecialchars($match['away_flag']); ?>">
+                                            <?php echo htmlspecialchars($match['home'] . ' vs ' . $match['away']); ?> (<?php echo $match['phase']; ?>)
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
                             </div>
-                        <div class="mb-4">
-                            <label class="form-label small fw-bold">2. Elige a tu Rival</label>
-                            <select name="challenged_user_id" id="challenged_user_id" class="form-select border-2" required>
-                                <option value="">-- ¿A quién retas? --</option>
-                                <?php foreach($users_list as $u): ?>
-                                    <option value="<?php echo $u['id']; ?>" data-name="<?php echo htmlspecialchars($u['nombre']); ?>">
-                                        <?php echo htmlspecialchars($u['nombre']); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100 py-3 fw-bold shadow">
-                            LANZAR DUELO <i class="bi bi-send-fill ms-2"></i>
-                        </button>
-                    </form>
+                            <div id="match_preview" class="mb-3 d-flex align-items-center justify-content-center p-3 bg-light rounded-3 border border-dashed" style="display:none !important;"></div>
+                            <div class="mb-4">
+                                <label class="form-label small fw-bold">2. Elige a tu Rival</label>
+                                <select name="challenged_user_id" id="challenged_user_id" class="form-select border-2" required>
+                                    <option value="">-- ¿A quién retas? --</option>
+                                    <?php foreach($users_list as $u): ?>
+                                        <option value="<?php echo $u['id']; ?>" data-name="<?php echo htmlspecialchars($u['nombre']); ?>">
+                                            <?php echo htmlspecialchars($u['nombre']); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 py-3 fw-bold shadow">
+                                RETAR <i class="bi bi-send-fill ms-2"></i>
+                            </button>
+                        </form>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -173,7 +198,7 @@ $all_pending = $stmt_pending->fetchAll(PDO::FETCH_ASSOC);
                     <?php if (empty($all_pending)): ?>
                         <div class="text-center py-5">
                             <i class="bi bi-ghost fs-1 text-muted opacity-25"></i>
-                            <p class="text-muted mt-2">No hay duelos activos en este momento.</p>
+                            <p class="text-muted mt-2">No tienes duelos pendientes.</p>
                         </div>
                     <?php else: ?>
                         <div class="table-responsive">
@@ -206,12 +231,9 @@ $all_pending = $stmt_pending->fetchAll(PDO::FETCH_ASSOC);
                                                 <span class="mx-2 small fw-bold text-danger">VS</span>
                                                 <span class="badge <?php echo !$soyRetador ? 'bg-primary' : 'bg-light text-dark border'; ?>"><?php echo $ch['challenged_name']; ?></span>
                                             </div>
-                                            <div class="small mt-1" style="font-size:0.65rem">
-                                                <?php echo $soyRetador ? '🔥 <span class="text-primary">Tú has retado</span>' : '⚠️ <span class="text-danger">Te han retado</span>'; ?>
-                                            </div>
                                         </td>
                                         <td class="text-center">
-                                            <span class="badge rounded-pill bg-warning text-dark px-3">PENDIENTE</span>
+                                            <span class="badge rounded-pill bg-warning text-dark px-3">ESPERANDO</span>
                                         </td>
                                     </tr>
                                     <?php endforeach; ?>
@@ -231,36 +253,37 @@ $all_pending = $stmt_pending->fetchAll(PDO::FETCH_ASSOC);
     const userSelect = document.getElementById('challenged_user_id');
     const preview = document.getElementById('match_preview');
 
-    matchSelect.addEventListener('change', function() {
-        const matchId = this.value;
-        const option = this.options[this.selectedIndex];
-        
-        // 1. Mostrar/Ocultar banderas
-        if (matchId) {
-            const h = option.dataset.homeFlag.toLowerCase();
-            const a = option.dataset.awayFlag.toLowerCase();
-            preview.style.setProperty('display', 'flex', 'important');
-            preview.innerHTML = `<img src="assets/img/banderas/${h}.png" class="flag-img mx-2"> <span class="fw-bold">VS</span> <img src="assets/img/banderas/${a}.png" class="flag-img mx-2">`;
-        } else {
-            preview.style.setProperty('display', 'none', 'important');
-        }
-
-        // 2. Bloquear usuarios
-        const blocked = busyUsers[matchId] || [];
-        Array.from(userSelect.options).forEach(opt => {
-            if (!opt.value) return;
-            const originalName = opt.dataset.name;
-            if (blocked.includes(parseInt(opt.value))) {
-                opt.disabled = true;
-                opt.textContent = originalName + " (Ocupado)";
+    if(matchSelect) {
+        matchSelect.addEventListener('change', function() {
+            const matchId = this.value;
+            const option = this.options[this.selectedIndex];
+            
+            if (matchId) {
+                const h = option.dataset.homeFlag.toLowerCase();
+                const a = option.dataset.awayFlag.toLowerCase();
+                preview.style.setProperty('display', 'flex', 'important');
+                preview.innerHTML = `<img src="assets/img/banderas/${h}.png" class="flag-img mx-2"> <span class="fw-bold">VS</span> <img src="assets/img/banderas/${a}.png" class="flag-img mx-2">`;
             } else {
-                opt.disabled = false;
-                opt.textContent = originalName;
+                preview.style.setProperty('display', 'none', 'important');
             }
+
+            const blocked = busyUsers[matchId] || [];
+            Array.from(userSelect.options).forEach(opt => {
+                if (!opt.value) return;
+                const originalName = opt.dataset.name;
+                if (blocked.includes(parseInt(opt.value))) {
+                    opt.disabled = true;
+                    opt.textContent = originalName + " (Ocupado)";
+                } else {
+                    opt.disabled = false;
+                    opt.textContent = originalName;
+                }
+            });
+            if (userSelect.selectedOptions[0]?.disabled) userSelect.value = "";
         });
-        if (userSelect.selectedOptions[0]?.disabled) userSelect.value = "";
-    });
+    }
 </script>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <?php include 'includes/footer.php'; ?>
 </body>
