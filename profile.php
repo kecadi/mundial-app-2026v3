@@ -1,7 +1,7 @@
 <?php
 // profile.php
 session_start();
-require_once 'config/db.php'; 
+require_once 'config/db.php';
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($new_name !== $user_data['nombre'] && !empty($new_name)) {
         $update_fields[] = 'nombre = ?';
         $update_params[] = $new_name;
-        $_SESSION['nombre'] = $new_name; 
+        $_SESSION['nombre'] = $new_name;
     }
     
     if (!empty($new_password)) {
@@ -74,16 +74,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border: 4px solid #fff;
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
-        .duel-win { border-left: 5px solid #198754; }
-        .duel-loss { border-left: 5px solid #dc3545; }
-        .duel-draw { border-left: 5px solid #6c757d; }
+        .progress { height: 12px; border-radius: 10px; }
+        .stat-card { transition: transform 0.2s; }
+        .stat-card:hover { transform: translateY(-5px); }
     </style>
 </head>
 <body class="bg-light">
 
 <?php 
-    $current_page = 'profile'; 
-    include 'includes/navbar.php'; 
+    $current_page = 'profile';
+    include 'includes/navbar.php';
 ?>
 
 <div class="container my-5">
@@ -104,6 +104,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php if ($success): ?>
         <div class="alert alert-success shadow-sm"><?php echo $success; ?></div>
     <?php endif; ?>
+
+    <?php
+    $sql_stats = "SELECT 
+        (SELECT COALESCE(SUM(points_earned), 0) FROM predictions WHERE user_id = :uid) as pts_partidos,
+        (SELECT COALESCE(SUM(points_awarded), 0) FROM daily_quiz_responses WHERE user_id = :uid) as pts_quiz,
+        (SELECT COALESCE(SUM(points_awarded), 0) FROM group_ranking_points WHERE user_id = :uid) as pts_bonus";
+    
+    $stmt_stats = $pdo->prepare($sql_stats);
+    $stmt_stats->execute(['uid' => $user_id]);
+    $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
+    
+    $total_pts = $stats['pts_partidos'] + $stats['pts_quiz'] + $stats['pts_bonus'];
+    
+    // Calcular porcentajes para el gráfico (evitar división por cero)
+    $p_partidos = $total_pts > 0 ? ($stats['pts_partidos'] / $total_pts) * 100 : 0;
+    $p_quiz = $total_pts > 0 ? ($stats['pts_quiz'] / $total_pts) * 100 : 0;
+    $p_bonus = $total_pts > 0 ? ($stats['pts_bonus'] / $total_pts) * 100 : 0;
+    ?>
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body p-4">
+            <h4 class="mb-4 text-primary"><i class="bi bi-bar-chart-line me-2"></i>Rendimiento de Puntos</h4>
+            
+            <div class="row mb-4">
+                <div class="col-md-4 mb-3">
+                    <div class="stat-card p-3 border rounded text-center bg-white">
+                        <div class="text-muted small text-uppercase fw-bold">Partidos y Duelos</div>
+                        <div class="h3 fw-bold text-primary mb-0"><?php echo $stats['pts_partidos']; ?></div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="stat-card p-3 border rounded text-center bg-white">
+                        <div class="text-muted small text-uppercase fw-bold">Quiz Diario</div>
+                        <div class="h3 fw-bold text-success mb-0"><?php echo $stats['pts_quiz']; ?></div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="stat-card p-3 border rounded text-center bg-white">
+                        <div class="text-muted small text-uppercase fw-bold">Bonus Especiales</div>
+                        <div class="h3 fw-bold text-info mb-0"><?php echo $stats['pts_bonus']; ?></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-2 d-flex justify-content-between">
+                <span class="small fw-bold">Distribución de tu éxito</span>
+                <span class="small text-muted">Total: <?php echo $total_pts; ?> pts</span>
+            </div>
+            <div class="progress mb-4" style="height: 25px;">
+                <div class="progress-bar bg-primary" role="progressbar" style="width: <?php echo $p_partidos; ?>%" title="Partidos"></div>
+                <div class="progress-bar bg-success" role="progressbar" style="width: <?php echo $p_quiz; ?>%" title="Quiz"></div>
+                <div class="progress-bar bg-info" role="progressbar" style="width: <?php echo $p_bonus; ?>%" title="Bonus"></div>
+            </div>
+            
+            <div class="row text-center small">
+                <div class="col"><i class="bi bi-circle-fill text-primary"></i> Partidos</div>
+                <div class="col"><i class="bi bi-circle-fill text-success"></i> Quiz</div>
+                <div class="col"><i class="bi bi-circle-fill text-info"></i> Bonus</div>
+            </div>
+        </div>
+    </div>
 
     <div class="card shadow-sm border-0">
         <div class="card-body p-4">
@@ -135,7 +196,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <h4 class="mb-4 text-primary"><i class="bi bi-swords me-2"></i>Historial de Duelos (Últimos 5)</h4>
             <?php 
-            // Buscamos desafíos donde el usuario participó y ya fueron procesados
             $stmt_duels = $pdo->prepare("
                 SELECT c.*, u1.nombre as retador, u2.nombre as retado, m.home_score, m.away_score
                 FROM match_challenges c
@@ -154,14 +214,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php else: ?>
                 <div class="list-group mb-4 shadow-sm">
                     <?php foreach($duels as $d): 
-                        // Lógica para determinar si el usuario actual ganó o perdió el duelo
-                        // Basado en el calculate.php: quien tenga más puntos en ese partido gana.
-                        // Para simplificar la vista, mostraremos si hubo puntos confiscados.
                         $es_retador = ($d['challenger_user_id'] == $user_id);
                         $oponente = $es_retador ? $d['retado'] : $d['retador'];
-                        
-                        // Nota: En una mejora futura, podrías guardar el winner_id en la tabla match_challenges
-                        // Por ahora lo marcamos como 'Duelo Finalizado'
                     ?>
                         <div class="list-group-item d-flex justify-content-between align-items-center border-start-0 border-end-0 py-3">
                             <div>
