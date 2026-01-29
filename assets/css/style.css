@@ -1,0 +1,45 @@
+    <style>
+        .flag-icon { font-size: 2rem; }
+        
+        /* Estilos para el Fondo del Estadio */
+        .card-match-bg {
+            background-size: cover;
+            background-position: center;
+            position: relative;
+            color: white; 
+            border: none; 
+        }
+
+        /* Capa de atenuación sobre la imagen */
+        .card-match-bg::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(10, 10, 10, 0.6); /* Oscurecer la imagen */
+            z-index: 1; 
+            border-radius: 0.375rem; 
+        }
+
+        /* Asegura que el contenido esté sobre la capa atenuada */
+        .card-match-content {
+            position: relative;
+            z-index: 2;
+        }
+        .card-header, .card-body { 
+            background: transparent !important; }
+        
+            /* Efecto de zoom suave para las caritas de los jugadores */
+        .player-avatar {
+            transition: transform 0.2s; /* Hace que el movimiento sea fluido */
+            cursor: pointer;
+        }
+
+        .player-avatar:hover {
+            transform: scale(1.5); /* Aumenta el tamaño un 50% */
+            z-index: 10;           /* Asegura que la foto ampliada quede por encima de las otras */
+            position: relative;
+        }
+    </style>
