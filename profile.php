@@ -1,7 +1,7 @@
 <?php
 // profile.php
 session_start();
-require_once 'config/db.php';
+require_once 'config/db.php'; 
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -12,11 +12,21 @@ $user_id = $_SESSION['user_id'];
 $error = '';
 $success = '';
 
-// Obtener datos actuales del usuario
-$stmt_user = $pdo->prepare("SELECT nombre, email FROM users WHERE id = ?");
+// 1. Obtener datos actuales del usuario (Incluyendo estadísticas)
+$stmt_user = $pdo->prepare("SELECT nombre, email, created_at FROM users WHERE id = ?");
 $stmt_user->execute([$user_id]);
 $user_data = $stmt_user->fetch(PDO::FETCH_ASSOC);
 
+// 2. Lógica de Estadísticas rápidas para las tarjetas superiores
+$stmt_stats = $pdo->prepare("SELECT 
+    COUNT(*) as total_preds,
+    SUM(CASE WHEN points_earned >= 25 THEN 1 ELSE 0 END) as exact_hits,
+    SUM(points_earned) as total_pts
+    FROM predictions WHERE user_id = ?");
+$stmt_stats->execute([$user_id]);
+$stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
+
+// 3. Procesar actualización de perfil (Formulario)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $new_name = trim($_POST['new_name']);
     $new_password = $_POST['new_password'];
@@ -28,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($new_name !== $user_data['nombre'] && !empty($new_name)) {
         $update_fields[] = 'nombre = ?';
         $update_params[] = $new_name;
-        $_SESSION['nombre'] = $new_name;
+        $_SESSION['nombre'] = $new_name; 
     }
     
     if (!empty($new_password)) {
@@ -41,244 +51,184 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $update_params[] = password_hash($new_password, PASSWORD_DEFAULT);
         }
     }
-
+    
     if (empty($error) && !empty($update_fields)) {
         $sql = "UPDATE users SET " . implode(', ', $update_fields) . " WHERE id = ?";
         $update_params[] = $user_id;
-        
-        $stmt_update = $pdo->prepare($sql);
-        $stmt_update->execute($update_params);
-        $success = 'Perfil actualizado correctamente.';
-        
-        $stmt_user->execute([$user_id]);
-        $user_data = $stmt_user->fetch(PDO::FETCH_ASSOC);
-    } elseif (empty($error) && empty($update_fields)) {
-        $error = 'No se realizaron cambios.';
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($update_params);
+        $success = '¡Perfil actualizado correctamente!';
+        $user_data['nombre'] = $new_name;
     }
 }
+
+// 4. OBTENER DATOS PARA EL GRÁFICO DE EVOLUCIÓN
+$stmt_h = $pdo->prepare("SELECT points_at_moment, rank_at_moment, recorded_at 
+                         FROM ranking_history 
+                         WHERE user_id = ? 
+                         ORDER BY recorded_at ASC");
+$stmt_h->execute([$user_id]);
+$history = $stmt_h->fetchAll(PDO::FETCH_ASSOC);
+
+$labels = [];
+$puntos = [];
+$posiciones = [];
+foreach($history as $h) {
+    $labels[] = date('d/m', strtotime($h['recorded_at']));
+    $puntos[] = $h['points_at_moment'];
+    $posiciones[] = $h['rank_at_moment'];
+}
 ?>
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mi Perfil</title>
-    <link rel="icon" type="image/png" href="/favicon.png">
+    <title>Mi Perfil - Mundial 2026</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <style>
-        .profile-avatar {
-            width: 120px;
-            height: 120px;
-            background-color: #f8f9fa;
-            border: 4px solid #fff;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-        }
-        .progress { height: 12px; border-radius: 10px; }
-        .stat-card { transition: transform 0.2s; }
+        .profile-header { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); color: white; border-radius: 15px; }
+        .stat-card { transition: transform 0.3s; border: none; }
         .stat-card:hover { transform: translateY(-5px); }
     </style>
 </head>
 <body class="bg-light">
 
-<?php 
-    $current_page = 'profile';
-    include 'includes/navbar.php';
-?>
+<?php include 'includes/navbar.php'; ?>
 
-<div class="container my-5">
-    <div class="row align-items-center mb-4">
-        <div class="col-auto">
-            <?php $avatar_url = "https://api.dicebear.com/7.x/fun-emoji/svg?seed=" . $user_id; ?>
-            <img src="<?php echo $avatar_url; ?>" alt="Avatar" class="rounded-circle profile-avatar">
+<div class="container py-5">
+    
+    <div class="profile-header p-4 mb-4 shadow-sm d-flex align-items-center">
+        <div class="rounded-circle bg-white text-primary d-flex align-items-center justify-content-center shadow" style="width: 80px; height: 80px;">
+            <i class="bi bi-person-fill fs-1"></i>
         </div>
-        <div class="col">
-            <h2 class="mb-0 text-primary">Mi Perfil de Usuario</h2>
-            <p class="text-muted mb-0">Gestiona tu identidad y revisa tus estadísticas</p>
+        <div class="ms-4">
+            <h2 class="mb-0 fw-bold"><?php echo htmlspecialchars($user_data['nombre']); ?></h2>
+            <p class="mb-0 opacity-75">Miembro desde: <?php echo date('M Y', strtotime($user_data['created_at'])); ?></p>
         </div>
     </div>
 
-    <?php if ($error): ?>
-        <div class="alert alert-danger shadow-sm"><?php echo $error; ?></div>
-    <?php endif; ?>
-    <?php if ($success): ?>
-        <div class="alert alert-success shadow-sm"><?php echo $success; ?></div>
-    <?php endif; ?>
-
-    <?php
-    $sql_stats = "SELECT 
-        (SELECT COALESCE(SUM(points_earned), 0) FROM predictions WHERE user_id = :uid) as pts_partidos,
-        (SELECT COALESCE(SUM(points_awarded), 0) FROM daily_quiz_responses WHERE user_id = :uid) as pts_quiz,
-        (SELECT COALESCE(SUM(points_awarded), 0) FROM group_ranking_points WHERE user_id = :uid) as pts_bonus";
-    
-    $stmt_stats = $pdo->prepare($sql_stats);
-    $stmt_stats->execute(['uid' => $user_id]);
-    $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
-    
-    $total_pts = $stats['pts_partidos'] + $stats['pts_quiz'] + $stats['pts_bonus'];
-    
-    // Calcular porcentajes para el gráfico (evitar división por cero)
-    $p_partidos = $total_pts > 0 ? ($stats['pts_partidos'] / $total_pts) * 100 : 0;
-    $p_quiz = $total_pts > 0 ? ($stats['pts_quiz'] / $total_pts) * 100 : 0;
-    $p_bonus = $total_pts > 0 ? ($stats['pts_bonus'] / $total_pts) * 100 : 0;
-    ?>
-
-    <div class="card shadow-sm border-0 mb-4">
-        <div class="card-body p-4">
-            <h4 class="mb-4 text-primary"><i class="bi bi-bar-chart-line me-2"></i>Rendimiento de Puntos</h4>
-            
-            <div class="row mb-4">
-                <div class="col-md-4 mb-3">
-                    <div class="stat-card p-3 border rounded text-center bg-white">
-                        <div class="text-muted small text-uppercase fw-bold">Partidos y Duelos</div>
-                        <div class="h3 fw-bold text-primary mb-0"><?php echo $stats['pts_partidos']; ?></div>
-                    </div>
-                </div>
-                <div class="col-md-4 mb-3">
-                    <div class="stat-card p-3 border rounded text-center bg-white">
-                        <div class="text-muted small text-uppercase fw-bold">Quiz Diario</div>
-                        <div class="h3 fw-bold text-success mb-0"><?php echo $stats['pts_quiz']; ?></div>
-                    </div>
-                </div>
-                <div class="col-md-4 mb-3">
-                    <div class="stat-card p-3 border rounded text-center bg-white">
-                        <div class="text-muted small text-uppercase fw-bold">Bonus Especiales</div>
-                        <div class="h3 fw-bold text-info mb-0"><?php echo $stats['pts_bonus']; ?></div>
-                    </div>
+    <div class="row mb-4">
+        <div class="col-md-4 mb-3">
+            <div class="card stat-card shadow-sm h-100 text-center">
+                <div class="card-body">
+                    <h6 class="text-muted text-uppercase small fw-bold">Puntos Totales</h6>
+                    <h2 class="text-primary fw-bold mb-0"><?php echo $stats['total_pts'] ?? 0; ?></h2>
                 </div>
             </div>
-
-            <div class="mb-2 d-flex justify-content-between">
-                <span class="small fw-bold">Distribución de tu éxito</span>
-                <span class="small text-muted">Total: <?php echo $total_pts; ?> pts</span>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card stat-card shadow-sm h-100 text-center border-start border-success border-4">
+                <div class="card-body">
+                    <h6 class="text-muted text-uppercase small fw-bold">Plenos (Resultados Exactos)</h6>
+                    <h2 class="text-success fw-bold mb-0"><?php echo $stats['exact_hits'] ?? 0; ?></h2>
+                </div>
             </div>
-            <div class="progress mb-4" style="height: 25px;">
-                <div class="progress-bar bg-primary" role="progressbar" style="width: <?php echo $p_partidos; ?>%" title="Partidos"></div>
-                <div class="progress-bar bg-success" role="progressbar" style="width: <?php echo $p_quiz; ?>%" title="Quiz"></div>
-                <div class="progress-bar bg-info" role="progressbar" style="width: <?php echo $p_bonus; ?>%" title="Bonus"></div>
-            </div>
-            
-            <div class="row text-center small">
-                <div class="col"><i class="bi bi-circle-fill text-primary"></i> Partidos</div>
-                <div class="col"><i class="bi bi-circle-fill text-success"></i> Quiz</div>
-                <div class="col"><i class="bi bi-circle-fill text-info"></i> Bonus</div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card stat-card shadow-sm h-100 text-center">
+                <div class="card-body">
+                    <h6 class="text-muted text-uppercase small fw-bold">Pronósticos Realizados</h6>
+                    <h2 class="text-dark fw-bold mb-0"><?php echo $stats['total_preds'] ?? 0; ?></h2>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="card shadow-sm border-0">
-        <div class="card-body p-4">
-            
-            <h4 class="mb-4 text-warning"><i class="bi bi-award-fill"></i> Logros Desbloqueados</h4>
-            <?php 
-            $stmt_ach = $pdo->prepare("SELECT code, description FROM user_achievements WHERE user_id = ? ORDER BY achieved_at DESC");
-            $stmt_ach->execute([$user_id]);
-            $achievements = $stmt_ach->fetchAll(PDO::FETCH_ASSOC);
-
-            if (empty($achievements)): ?>
-                <p class="alert alert-info border-0 small">Aún no has desbloqueado ningún logro. ¡Sigue participando!</p>
-            <?php else: ?>
-                <div class="row mb-4">
-                    <?php foreach($achievements as $ach): ?>
-                        <div class="col-md-6 mb-3">
-                            <div class="card bg-warning bg-opacity-10 border-warning border-opacity-25 h-100">
-                                <div class="card-body py-2 d-flex justify-content-between align-items-center">
-                                    <span class="fw-bold text-dark small"><i class="bi bi-patch-check-fill text-warning"></i> <?php echo htmlspecialchars($ach['code']); ?></span>
-                                    <small class="text-muted" style="font-size: 0.7rem;"><?php echo htmlspecialchars($ach['description']); ?></small>
-                                </div>
-                            </div>
+    <div class="row">
+        <div class="col-lg-8 mb-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0 fw-bold text-primary"><i class="bi bi-graph-up me-2"></i>Evolución del Campeonato</h5>
+                </div>
+                <div class="card-body">
+                    <?php if (empty($history)): ?>
+                        <div class="text-center py-5">
+                            <i class="bi bi-bar-chart-steps fs-1 text-muted opacity-25"></i>
+                            <p class="text-muted mt-3">Los datos de evolución se generarán tras el próximo partido cerrado.</p>
                         </div>
-                    <?php endforeach; ?>
+                    <?php else: ?>
+                        <canvas id="evolutionChart" style="width: 100%; height: 300px;"></canvas>
+                    <?php endif; ?>
                 </div>
-            <?php endif; ?>
+            </div>
+        </div>
 
-            <hr class="my-5 opacity-25">
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-gear me-2"></i>Configuración</h5>
+                </div>
+                <div class="card-body">
+                    <?php if ($success): ?> <div class="alert alert-success py-2 small"><?php echo $success; ?></div> <?php endif; ?>
+                    <?php if ($error): ?> <div class="alert alert-danger py-2 small"><?php echo $error; ?></div> <?php endif; ?>
 
-            <h4 class="mb-4 text-primary"><i class="bi bi-swords me-2"></i>Historial de Duelos (Últimos 5)</h4>
-            <?php 
-            $stmt_duels = $pdo->prepare("
-                SELECT c.*, u1.nombre as retador, u2.nombre as retado, m.home_score, m.away_score
-                FROM match_challenges c
-                JOIN users u1 ON c.challenger_user_id = u1.id
-                JOIN users u2 ON c.challenged_user_id = u2.id
-                JOIN matches m ON c.match_id = m.id
-                WHERE (c.challenger_user_id = :uid OR c.challenged_user_id = :uid)
-                AND c.wager_status = 'PROCESSED'
-                ORDER BY c.id DESC LIMIT 5
-            ");
-            $stmt_duels->execute(['uid' => $user_id]);
-            $duels = $stmt_duels->fetchAll(PDO::FETCH_ASSOC);
-
-            if (empty($duels)): ?>
-                <p class="text-muted small italic">No tienes duelos finalizados todavía.</p>
-            <?php else: ?>
-                <div class="list-group mb-4 shadow-sm">
-                    <?php foreach($duels as $d): 
-                        $es_retador = ($d['challenger_user_id'] == $user_id);
-                        $oponente = $es_retador ? $d['retado'] : $d['retador'];
-                    ?>
-                        <div class="list-group-item d-flex justify-content-between align-items-center border-start-0 border-end-0 py-3">
-                            <div>
-                                <span class="fw-bold">Vs. <?php echo htmlspecialchars($oponente); ?></span>
-                                <div class="text-muted small">Reto en el partido ID: <?php echo $d['match_id']; ?></div>
-                            </div>
-                            <div class="text-end">
-                                <span class="badge bg-dark rounded-pill"><?php echo $d['points_seized']; ?> pts en juego</span>
-                                <div class="small text-success mt-1">Procesado</div>
-                            </div>
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Nombre de Usuario</label>
+                            <input type="text" name="new_name" class="form-control" value="<?php echo htmlspecialchars($user_data['nombre']); ?>" required>
                         </div>
-                    <?php endforeach; ?>
-                </div>
-            <?php endif; ?>
-
-            <hr class="my-5 opacity-25">
-
-            <form method="POST" action="profile.php">
-                <h4 class="mb-4"><i class="bi bi-person-vcard me-2"></i>Información Personal</h4>
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label text-muted">Email (No modificable)</label>
-                        <div class="input-group shadow-sm">
-                            <span class="input-group-text bg-light"><i class="bi bi-envelope"></i></span>
-                            <input type="email" class="form-control bg-light" value="<?php echo htmlspecialchars($user_data['email']); ?>" disabled>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Email (No editable)</label>
+                            <input type="email" class="form-control bg-light text-muted" value="<?php echo htmlspecialchars($user_data['email']); ?>" readonly>
                         </div>
-                    </div>
-                    
-                    <div class="col-md-6 mb-4">
-                        <label for="new_name" class="form-label fw-bold">Nombre en el Ranking</label>
-                        <div class="input-group shadow-sm">
-                            <span class="input-group-text bg-white"><i class="bi bi-pencil"></i></span>
-                            <input type="text" name="new_name" id="new_name" class="form-control" value="<?php echo htmlspecialchars($user_data['nombre']); ?>" required>
+                        <hr>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-danger">Cambiar Contraseña</label>
+                            <input type="password" name="new_password" class="form-control" placeholder="Nueva contraseña">
                         </div>
-                    </div>
+                        <div class="mb-4">
+                            <label class="form-label small fw-bold">Repetir Contraseña</label>
+                            <input type="password" name="confirm_password" class="form-control">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 shadow-sm">Actualizar mis datos</button>
+                    </form>
                 </div>
-
-                <hr class="my-5 opacity-25">
-
-                <h4 class="mb-4"><i class="bi bi-shield-lock me-2"></i>Seguridad</h4>
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label for="new_password" class="form-label">Nueva Contraseña</label>
-                        <input type="password" name="new_password" id="new_password" class="form-control shadow-sm" placeholder="Dejar en blanco para no cambiar">
-                    </div>
-                    
-                    <div class="col-md-6 mb-4">
-                        <label for="confirm_password" class="form-label">Confirmar Contraseña</label>
-                        <input type="password" name="confirm_password" id="confirm_password" class="form-control shadow-sm">
-                    </div>
-                </div>
-
-                <div class="mt-4 border-top pt-4 text-end">
-                    <button type="submit" class="btn btn-primary btn-lg px-5 shadow">
-                        <i class="bi bi-check-circle me-2"></i>Guardar Cambios
-                    </button>
-                </div>
-            </form>
+            </div>
         </div>
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+<?php if (!empty($history)): ?>
+    const ctx = document.getElementById('evolutionChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: <?php echo json_encode($labels); ?>,
+            datasets: [{
+                label: 'Puntos',
+                data: <?php echo json_encode($puntos); ?>,
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                fill: true,
+                tension: 0.3,
+                yAxisID: 'y'
+            }, {
+                label: 'Posición',
+                data: <?php echo json_encode($posiciones); ?>,
+                borderColor: '#ef4444',
+                borderDash: [5, 5],
+                tension: 0.1,
+                fill: false,
+                yAxisID: 'y1'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Puntos Totales' } },
+                y1: { type: 'linear', display: true, position: 'right', reverse: true, grid: { drawOnChartArea: false }, title: { display: true, text: 'Posición Ranking' } }
+            }
+        }
+    });
+<?php endif; ?>
+</script>
+
 <?php include 'includes/footer.php'; ?>
 </body>
 </html>

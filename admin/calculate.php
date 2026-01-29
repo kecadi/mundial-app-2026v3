@@ -28,57 +28,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'rqid' => $real_qualifier_id, 'id' => $match_id
         ]);
 
-        // 2. CONFIGURACIÓN DE PUNTOS
+        // 2. CONFIGURACIÓN DE PUNTOS (Según tus reglas: 25, 15, 5)
         $is_knockout = ($match_phase !== 'group');
-        $exact_pts = $is_knockout ? 30 : 25;
-        $winner_pts = $is_knockout ? 25 : 15;
-        $goals_pts = $is_knockout ? 10 : 5;
+        $exact_pts  = $is_knockout ? 30 : 25;   // 25 en grupos, 30 en eliminatorias
+        $winner_pts = $is_knockout ? 20 : 15;   // 15 en grupos, 20 en eliminatorias
+        $goal_pts   = 5;                        // 5 puntos por acierto de goles de un equipo
+        $qualifier_bonus = 10;                  // Bonus por acertar quién pasa (solo eliminatorias)
 
-        // 3. PROCESAR CADA PREDICCIÓN
-        $stmt_preds = $pdo->prepare("SELECT * FROM predictions WHERE match_id = :mid");
-        $stmt_preds->execute(['mid' => $match_id]);
+        // 3. OBTENER PREDICCIONES
+        $stmt_preds = $pdo->prepare("SELECT user_id, predicted_home_score, predicted_away_score, predicted_qualifier_id FROM predictions WHERE match_id = ?");
+        $stmt_preds->execute([$match_id]);
         $predictions = $stmt_preds->fetchAll(PDO::FETCH_ASSOC);
 
         $user_points_map = []; 
 
-        foreach ($predictions as $pred) {
-            $u_id = $pred['user_id'];
-            $p_home = (int)$pred['predicted_home_score'];
-            $p_away = (int)$pred['predicted_away_score'];
-            $p_qualifier = $pred['predicted_qualifier_id'];
-            $points = 0;
+        foreach ($predictions as $p) {
+            $pts = 0;
+            $p_home = (int)$p['predicted_home_score'];
+            $p_away = (int)$p['predicted_away_score'];
 
-            $is_exact = ($p_home === $real_home && $p_away === $real_away);
-            $real_result = ($real_home > $real_away) ? 'H' : (($real_home < $real_away) ? 'A' : 'X');
-            $pred_result = ($p_home > $p_away) ? 'H' : (($p_home < $p_away) ? 'A' : 'X');
-            $winner_match = ($real_result === $pred_result);
+            $real_diff = $real_home - $real_away;
+            $pred_diff = $p_home - $p_away;
 
-            if ($is_exact) {
-                $points = $exact_pts;
-                if ($is_knockout && $real_home === $real_away && (int)$p_qualifier === $real_qualifier_id) {
-                    $points += $winner_pts;
-                }
-            } else {
-                if ($winner_match) $points += $winner_pts;
-                if ($p_home === $real_home || $p_away === $real_away) $points += $goals_pts;
+            // LÓGICA NO ACUMULABLE (Se otorga la más alta encontrada)
+            
+            // A. Resultado exacto (25 pts)
+            if ($p_home === $real_home && $p_away === $real_away) {
+                $pts = $exact_pts;
+            } 
+            // B. Equipo Ganador o Empate (15 pts)
+            elseif (($real_diff > 0 && $pred_diff > 0) || ($real_diff < 0 && $pred_diff < 0) || ($real_diff === 0 && $pred_diff === 0)) {
+                $pts = $winner_pts;
+            }
+            // C. Acierto de goles de uno de los dos equipos (5 pts)
+            elseif ($p_home === $real_home || $p_away === $real_away) {
+                $pts = $goal_pts;
             }
 
-            // Comodín x2
-            $stmt_wc = $pdo->prepare("SELECT COUNT(*) FROM users WHERE id = ? AND wildcard_used_match_id = ?");
-            $stmt_wc->execute([$u_id, $match_id]);
-            if ($stmt_wc->fetchColumn() > 0) {
-                $points *= 2;
+            // D. Bonus extra por clasificado (Solo en eliminatorias y se suma a lo anterior)
+            if ($is_knockout && $real_qualifier_id && (int)$p['predicted_qualifier_id'] === (int)$real_qualifier_id) {
+                $pts += $qualifier_bonus;
             }
 
-            $user_points_map[$u_id] = $points;
+            // E. Comodín x2
+            $stmt_w = $pdo->prepare("SELECT COUNT(*) FROM users WHERE id = ? AND wildcard_used_match_id = ?");
+            $stmt_w->execute([$p['user_id'], $match_id]);
+            if ($stmt_w->fetchColumn() > 0) {
+                $pts *= 2;
+            }
+
+            $user_points_map[$p['user_id']] = $pts;
         }
 
-        // 4. LÓGICA DE DUELOS (CHALLENGES)
+        // 4. PROCESAR DUELOS (CHALLENGES)
         $updated_user_points = $user_points_map;
-        
-        $stmt_ch = $pdo->prepare("SELECT * FROM match_challenges WHERE match_id = ? AND wager_status = 'PENDING'");
-        $stmt_ch->execute([$match_id]);
-        $challenges = $stmt_ch->fetchAll(PDO::FETCH_ASSOC);
+        $stmt_challenges = $pdo->prepare("SELECT * FROM match_challenges WHERE match_id = ? AND wager_status = 'PENDING'");
+        $stmt_challenges->execute([$match_id]);
+        $challenges = $stmt_challenges->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($challenges as $ch) {
             $u1 = $ch['challenger_user_id'];
@@ -104,19 +110,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        // 5. GUARDADO FINAL: SOLO EN TABLA PREDICTIONS
-        // El ranking en index.php sumará estos valores automáticamente
+        // 5. GUARDADO DE PUNTOS EN PREDICTIONS
         $upd_pred = $pdo->prepare("UPDATE predictions SET points_earned = ? WHERE user_id = ? AND match_id = ?");
-
         foreach ($updated_user_points as $uid => $total_p_partido) {
             $upd_pred->execute([$total_p_partido, $uid, $match_id]);
         }
 
-        $pdo->prepare("INSERT INTO admin_activity_log (action_type, description) VALUES ('match_close', ?)")
-            ->execute(["Calculados puntos para partido ID $match_id. Duelos procesados."]);
+        // 6. GUARDAR HISTORIAL PARA EL GRÁFICO DEL PERFIL
+        $sql_ranking_snap = "SELECT 
+            u.id, 
+            (COALESCE(T_MATCH.match_points, 0) + COALESCE(T_BONUS.bonus_points, 0) + COALESCE(T_QUIZ.quiz_points, 0)) AS total_actual
+        FROM users u
+        LEFT JOIN (SELECT user_id, SUM(points_earned) AS match_points FROM predictions GROUP BY user_id) T_MATCH ON u.id = T_MATCH.user_id
+        LEFT JOIN (SELECT user_id, SUM(points_awarded) AS bonus_points FROM group_ranking_points GROUP BY user_id) T_BONUS ON u.id = T_BONUS.user_id
+        LEFT JOIN (SELECT user_id, SUM(points_awarded) AS quiz_points FROM daily_quiz_responses GROUP BY user_id) T_QUIZ ON u.id = T_QUIZ.user_id
+        WHERE u.role != 'admin'
+        ORDER BY total_actual DESC";
+
+        $ranking_data = $pdo->query($sql_ranking_snap)->fetchAll(PDO::FETCH_ASSOC);
+
+        $stmt_ins_history = $pdo->prepare("INSERT INTO ranking_history (user_id, match_id, points_at_moment, rank_at_moment) VALUES (?, ?, ?, ?)");
+        $current_pos = 1;
+        foreach ($ranking_data as $row) {
+            $stmt_ins_history->execute([$row['id'], $match_id, $row['total_actual'], $current_pos]);
+            $current_pos++;
+        }
 
         $pdo->commit();
-        header('Location: index.php?msg=ok');
+        
+        // Log de actividad
+        $pdo->prepare("INSERT INTO admin_activity_log (action_type, description) VALUES ('match_close', ?)")
+            ->execute(["Calculados puntos e historial para partido ID $match_id."]);
+
+        // Redirección corregida (ajusta si tu archivo admin principal se llama diferente)
+        header("Location: index.php?msg=success");
         exit;
 
     } catch (Exception $e) {
