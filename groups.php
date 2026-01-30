@@ -63,7 +63,7 @@ $partidos_predichos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <body class="bg-light">
 
 <?php 
-    $current_page = 'home'; // Definimos que estamos en Home
+    $current_page = 'groups'; 
     include 'includes/navbar.php'; 
 ?>
 
