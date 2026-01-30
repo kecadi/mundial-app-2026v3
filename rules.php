@@ -17,6 +17,10 @@ if (!isset($_SESSION['user_id'])) {
     <link rel="icon" type="image/png" href="/favicon.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        .rules-section-title { border-left: 5px solid #0d6efd; padding-left: 15px; margin-top: 30px; font-weight: bold; color: #333; }
+        .achievement-badge-mini { width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: #ffc107; color: white; margin-right: 8px; font-size: 0.8rem; }
+    </style>
 </head>
 <body class="bg-light">
 
@@ -26,85 +30,97 @@ if (!isset($_SESSION['user_id'])) {
 ?>
 
 <div class="container my-5">
-    <h2 class="mb-4 text-center text-primary"><i class="bi bi-patch-question-fill"></i> Reglas Oficiales de la Quiniela</h2>
+    <h2 class="mb-4 text-center text-primary fw-bold"><i class="bi bi-patch-question-fill"></i> Reglas Oficiales de la Quiniela</h2>
 
-    <div class="card shadow-lg mb-5">
-        <div class="card-body">
-            <h4 class="card-title text-dark">1. Reglas Generales y Bloqueo de Tiempo</h4>
+    <div class="card shadow-lg border-0 rounded-4 mb-5">
+        <div class="card-body p-4 p-md-5">
+            
+            <h4 class="rules-section-title">1. Gestión de Pronósticos y Tiempos</h4>
             <hr>
             <ul>
-                <li>**Bloqueo de Partidos:** Todas las predicciones de partido se bloquean **2 minutos antes** de la hora de inicio oficial del encuentro. Una vez bloqueado, el pronóstico es final.</li>
-                <li>**Bloqueo Especial (Alto Valor):** Las predicciones de **Goleador, Portero, Campeón y Goles Totales** se cierran antes del **primer partido** del torneo.</li>
-                <li>**Cálculo:** Los puntos se calculan automáticamente en el Panel Admin tras introducir el resultado real.</li>
+                <li><strong>Bloqueo de Partidos:</strong> Las predicciones se cierran automáticamente <strong>2 minutos antes</strong> del pitido inicial.</li>
+                <li><strong>Bloqueo de Torneo:</strong> Las elecciones de <strong>Campeón, Bota de Oro, Guante de Oro y Goles Totales</strong> son definitivas y se bloquean al comenzar el <strong>primer partido</strong> del Mundial.</li>
+                <li><strong>Edición:</strong> Puedes cambiar tus resultados tantas veces como quieras mientras el cronómetro de bloqueo no llegue a cero.</li>
             </ul>
 
-            <h4 class="card-title text-dark mt-4">2. Comodín x2 y Desafío de Predicción (Duelo)</h4>
+            <h4 class="rules-section-title">2. Comodín x2 y Duelos Directos</h4>
             <hr>
-            <p class="fw-bold text-danger">¡Cada participante dispone de un único Comodín x2 para todo el torneo!</p>
+            <p class="fw-bold text-danger"><i class="bi bi-exclamation-triangle-fill"></i> ¡Solo tienes UN Comodín x2 para todo el campeonato!</p>
             <ul>
-                <li>**Comodín (Efecto):** Al activar el comodín en un partido, los puntos que obtengas por ese encuentro se **duplicarán (x2)**.</li>
-                <li>**Comodín (Gasto):** Si obtienes 0 puntos en ese partido, el comodín se gasta sin efecto.</li>
-                <li>**Comodín (Restricción):** Una vez fijado, es irreversible.</li>
-                <hr>
-                <li>**⚔️ Restricción del Duelo:** Solo puedes iniciar **UN Desafío de Predicción por cada fase del torneo** (Grupos, Octavos, Cuartos, etc.). Úsalo estratégicamente en el partido de mayor riesgo/recompensa.</li>
+                <li><strong>Efecto Comodín:</strong> Duplica los puntos obtenidos en el partido seleccionado. Se recomienda usarlo en partidos donde estés muy seguro o donde el riesgo/beneficio sea alto (Fases Eliminatorias).</li>
+                <li><strong>⚔️ Duelos (Challenges):</strong> Solo puedes lanzar <strong>UN desafío por fase</strong> (Fase de Grupos, Octavos, Cuartos, Semifinales y Final). Al ganar un duelo, "robas" una parte de la bonificación del rival.</li>
             </ul>
 
-            <h4 class="card-title text-dark mt-4">3. Puntuación de Partidos (Fase de Grupos)</h4>
+            <h4 class="rules-section-title">3. Sistema de Puntuación (Grupos vs Eliminatorias)</h4>
             <hr>
-            <p class="fw-bold">Puntuación de FASE DE GRUPOS (No Acumulable - Se otorga la más alta):</p>
+            <div class="row">
+                <div class="col-md-6">
+                    <p class="fw-bold text-primary text-uppercase small">Fase de Grupos (No Acumulable)</p>
+                    <ul class="list-unstyled">
+                        <li><span class="badge bg-primary">25 Pts</span> Resultado Exacto.</li>
+                        <li><span class="badge bg-secondary">15 Pts</span> Tendencia (1X2).</li>
+                        <li><span class="badge bg-light text-dark border">5 Pts</span> Goles de un equipo.</li>
+                    </ul>
+                </div>
+                <div class="col-md-6 border-start">
+                    <p class="fw-bold text-success text-uppercase small">Eliminatorias (Acumulable en Empates)</p>
+                    <ul class="list-unstyled">
+                        <li><span class="badge bg-success">30 Pts</span> Resultado Exacto.</li>
+                        <li><span class="badge bg-info text-dark">25 Pts</span> Equipo que Clasifica.</li>
+                        <li><span class="badge bg-light text-dark border">10 Pts</span> Goles de un equipo.</li>
+                        <li><small class="text-muted">* Si aciertas un empate exacto y el clasificado, sumas 30 + 25 = 55 Pts.</small></li>
+                    </ul>
+                </div>
+            </div>
+
+            <h4 class="rules-section-title">4. Bonificaciones Especiales</h4>
+            <hr>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle border">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Concepto</th>
+                            <th>Puntos</th>
+                            <th>Requisito</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>🏆 Campeón del Mundo</td><td class="fw-bold text-success">150</td><td>Acertar el ganador de la gran final.</td></tr>
+                        <tr><td>👟 Bota/🛡️ Guante de Oro</td><td class="fw-bold text-success">100 c/u</td><td>Acertar los premios oficiales de la FIFA.</td></tr>
+                        <tr><td>⚽ Goles Totales</td><td class="fw-bold text-success">25</td><td>Margen de error de <strong>± 5 goles</strong> sobre el total.</td></tr>
+                        <tr><td>🧠 Quiz Diario</td><td class="fw-bold text-success">10</td><td>Responder correctamente en <strong>menos de 10 segundos</strong>.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="rules-section-title">5. Perfil, Evolución y Logros</h4>
+            <hr>
+            <p>Hemos añadido nuevas herramientas para que sigas tu rendimiento de forma profesional:</p>
             <ul>
-                <li>**25 puntos:** Acierto del Resultado Exacto.</li>
-                <li>**15 puntos:** Acierto del Equipo Ganador o Empate (1X2).</li>
-                <li>**5 puntos:** Acierto del Total de Goles de uno de los dos equipos.</li>
+                <li><strong>📊 Gráfico de Evolución:</strong> En tu perfil puedes ver una gráfica con tu historial de puntos y posición en el ranking tras cada partido. ¡Analiza si estás en racha o necesitas remontar!</li>
+                <li><strong>🏅 Sistema de Condecoraciones:</strong> Desbloquea medallas automáticas por tus hitos en el juego:
+                    <ul>
+                        <li><span class="text-primary fw-bold">Ojo de Halcón:</span> Por tu primer pleno (resultado exacto).</li>
+                        <li><span class="text-warning fw-bold">Estratega:</span> Por sumar puntos importantes usando el Comodín x2.</li>
+                        <li><span class="text-success fw-bold">Fiel Seguidor:</span> Por completar todos los pronósticos de la Fase de Grupos.</li>
+                        <li><span class="text-info fw-bold">Maestro Quiz:</span> Por acertar 3 preguntas diarias de forma consecutiva.</li>
+                        <li><span class="text-danger fw-bold">Caza-Gigantes:</span> Por ganar un Duelo Directo (Challenge).</li>
+                    </ul>
+                </li>
             </ul>
 
-            <h4 class="card-title text-dark mt-4">4. Puntuación de Partidos (Fases Eliminatorias)</h4>
+            <h4 class="rules-section-title">6. Herramientas de Análisis</h4>
             <hr>
-            <p class="fw-bold">Puntuación de ELIMINATORIAS (Dieciseisavos a la Final):</p>
             <ul>
-                <li>**Acumulación Especial:** Si aciertas el **Resultado Exacto (30 pts)** Y el partido finalizó en **Empate**, los puntos del Clasificado (25 pts) se acumulan (máximo 55 pts).</li>
-                <li>**30 puntos:** Acierto del Resultado Exacto.</li>
-                <li>**25 puntos:** Acierto del Equipo que Clasifica (ganador final post-penaltis).</li>
-                <li>**10 puntos:** Acierto del Total de Goles de uno de los dos equipos.</li>
-            </ul>
-
-            <h4 class="card-title text-dark mt-4">5. Bonificaciones Mayores y Acumuladas</h4>
-            <hr>
-            <table class="table table-sm table-bordered">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Premio/Logro</th>
-                        <th>Puntuación</th>
-                        <th>Regla</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr><td>🏆 Campeón del Torneo</td><td class="fw-bold">150 puntos</td><td>Acertar el ganador final del Mundial.</td></tr>
-                    <tr><td>👟 Goleador/🛡️ Portero</td><td class="fw-bold">100 puntos c/u</td><td>Acertar al ganador oficial del premio.</td></tr>
-                    <tr><td>⚽ Goles Totales</td><td>25 puntos</td><td>Acertar el total de goles del torneo con un margen de **± 5 goles**.</td></tr>
-                    <tr><td>🎯 Quiz Diario</td><td>10 puntos</td><td>Acertar la pregunta diaria **en menos de 10 segundos**.</td></tr>
-                    <tr><td colspan="3" class="table-light fw-bold">PUNTOS DE CLASIFICACIÓN DE GRUPO (No Acumulables)</td></tr>
-                    <tr><td>Acierto de Orden Exacto (1º y 2º)</td><td>90 puntos</td><td></td></tr>
-                    <tr><td>Acertar los 2 Clasificados (sin orden)</td><td>40 puntos</td><td></td></tr>
-                    <tr><td>Acertar 1º o 2º (posición individual)</td><td>25 puntos</td><td></td></tr>
-                    <tr><td>Acertar 1 Clasificado (sin orden)</td><td>20 puntos</td><td></td></tr>
-                </tbody>
-                    </table>
-
-            <h4 class="card-title text-dark mt-4">6. Reconocimiento Social</h4>
-            <hr>
-            <p class="small text-muted">La aplicación incluye features sociales y de gestión:</p>
-            <ul>
-                <li>**Timeline:** Espacio de comentarios por partido (con seguridad XSS).</li>
-                <li>**Consenso 1X2:** Gráfico que muestra el balance de predicciones de todos los usuarios.</li>
-                <li>**Rivalidad:** Puedes fijar un rival en la página de Bonus para hacer seguimiento en el Ranking.</li>
-                <li>**Medallas:** Se rastrean logros como **El Francotirador** (3 exactos consecutivos) para ser mostrados en tu Perfil (no otorgan puntos).</li>
+                <li><strong>Timeline y Consenso:</strong> Consulta qué opina la mayoría antes de cerrar tu apuesta y comenta los partidos en tiempo real con el resto de jugadores.</li>
+                <li><strong>Estadísticas Avanzadas:</strong> Consulta tu efectividad, promedio de goles y rendimiento específico en fases KO desde tu Dashboard de Estadísticas.</li>
             </ul>
 
         </div>
+        <div class="card-footer bg-white border-0 text-center pb-4">
+            <a href="index.php" class="btn btn-primary px-5 rounded-pill shadow-sm"><i class="bi bi-house-door me-2"></i>Volver al Dashboard</a>
+        </div>
     </div>
-    
-    <a href="index.php" class="btn btn-secondary">Volver al Dashboard</a>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
