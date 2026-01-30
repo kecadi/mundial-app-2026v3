@@ -2,6 +2,7 @@
 // admin/calculate.php
 session_start();
 require_once '../config/db.php'; 
+require_once '../includes/check_achievements.php'; // IMPORTANTE: Cargamos el motor de logros complejos
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     die("Acceso denegado.");
@@ -50,27 +51,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $real_diff = $real_home - $real_away;
             $pred_diff = $p_home - $p_away;
 
-            // LÓGICA NO ACUMULABLE (Se otorga la más alta encontrada)
-            
-            // A. Resultado exacto (25 pts)
+            // LÓGICA NO ACUMULABLE
             if ($p_home === $real_home && $p_away === $real_away) {
                 $pts = $exact_pts;
-            } 
-            // B. Equipo Ganador o Empate (15 pts)
-            elseif (($real_diff > 0 && $pred_diff > 0) || ($real_diff < 0 && $pred_diff < 0) || ($real_diff === 0 && $pred_diff === 0)) {
+            } elseif (($real_diff > 0 && $pred_diff > 0) || ($real_diff < 0 && $pred_diff < 0) || ($real_diff === 0 && $pred_diff === 0)) {
                 $pts = $winner_pts;
-            }
-            // C. Acierto de goles de uno de los dos equipos (5 pts)
-            elseif ($p_home === $real_home || $p_away === $real_away) {
+            } elseif ($p_home === $real_home || $p_away === $real_away) {
                 $pts = $goal_pts;
             }
 
-            // D. Bonus extra por clasificado (Solo en eliminatorias y se suma a lo anterior)
             if ($is_knockout && $real_qualifier_id && (int)$p['predicted_qualifier_id'] === (int)$real_qualifier_id) {
                 $pts += $qualifier_bonus;
             }
 
-            // E. Comodín x2
+            // Aplicación Comodín x2
             $stmt_w = $pdo->prepare("SELECT COUNT(*) FROM users WHERE id = ? AND wildcard_used_match_id = ?");
             $stmt_w->execute([$p['user_id'], $match_id]);
             if ($stmt_w->fetchColumn() > 0) {
@@ -89,12 +83,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($challenges as $ch) {
             $u1 = $ch['challenger_user_id'];
             $u2 = $ch['challenged_user_id'];
-
             if (isset($user_points_map[$u1]) && isset($user_points_map[$u2])) {
-                $pts1 = $user_points_map[$u1];
-                $pts2 = $user_points_map[$u2];
+                $pts1 = $user_points_map[$u1]; $pts2 = $user_points_map[$u2];
                 $seized = 0;
-
                 if ($pts1 > $pts2) {
                     $seized = $pts2;
                     $updated_user_points[$u1] += $seized;
@@ -104,7 +95,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $updated_user_points[$u2] += $seized;
                     $updated_user_points[$u1] = 0;
                 }
-
                 $upd_ch = $pdo->prepare("UPDATE match_challenges SET wager_status = 'PROCESSED', points_seized = ? WHERE id = ?");
                 $upd_ch->execute([$seized, $ch['id']]);
             }
@@ -117,18 +107,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // 6. GUARDAR HISTORIAL PARA EL GRÁFICO DEL PERFIL
-        $sql_ranking_snap = "SELECT 
-            u.id, 
-            (COALESCE(T_MATCH.match_points, 0) + COALESCE(T_BONUS.bonus_points, 0) + COALESCE(T_QUIZ.quiz_points, 0)) AS total_actual
-        FROM users u
-        LEFT JOIN (SELECT user_id, SUM(points_earned) AS match_points FROM predictions GROUP BY user_id) T_MATCH ON u.id = T_MATCH.user_id
-        LEFT JOIN (SELECT user_id, SUM(points_awarded) AS bonus_points FROM group_ranking_points GROUP BY user_id) T_BONUS ON u.id = T_BONUS.user_id
-        LEFT JOIN (SELECT user_id, SUM(points_awarded) AS quiz_points FROM daily_quiz_responses GROUP BY user_id) T_QUIZ ON u.id = T_QUIZ.user_id
-        WHERE u.role != 'admin'
-        ORDER BY total_actual DESC";
+        $sql_ranking_snap = "SELECT u.id, (COALESCE(T_MATCH.match_points, 0) + COALESCE(T_BONUS.bonus_points, 0) + COALESCE(T_QUIZ.quiz_points, 0)) AS total_actual
+            FROM users u
+            LEFT JOIN (SELECT user_id, SUM(points_earned) AS match_points FROM predictions GROUP BY user_id) T_MATCH ON u.id = T_MATCH.user_id
+            LEFT JOIN (SELECT user_id, SUM(points_awarded) AS bonus_points FROM group_ranking_points GROUP BY user_id) T_BONUS ON u.id = T_BONUS.user_id
+            LEFT JOIN (SELECT user_id, SUM(points_awarded) AS quiz_points FROM daily_quiz_responses GROUP BY user_id) T_QUIZ ON u.id = T_QUIZ.user_id
+            WHERE u.role != 'admin' ORDER BY total_actual DESC";
 
         $ranking_data = $pdo->query($sql_ranking_snap)->fetchAll(PDO::FETCH_ASSOC);
-
         $stmt_ins_history = $pdo->prepare("INSERT INTO ranking_history (user_id, match_id, points_at_moment, rank_at_moment) VALUES (?, ?, ?, ?)");
         $current_pos = 1;
         foreach ($ranking_data as $row) {
@@ -136,13 +122,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $current_pos++;
         }
 
+        // =====================================================================
+        // 7. FASE NUEVA: REPARTIR LOGROS AUTOMÁTICOS
+        // =====================================================================
+        
+        // Logro Inmediato: Ojo de Halcón (Resultado exacto)
+        $pdo->prepare("INSERT IGNORE INTO user_achievements (user_id, achievement_key) 
+                       SELECT user_id, 'hawk_eye' FROM predictions 
+                       WHERE match_id = ? AND points_earned >= 25")->execute([$match_id]);
+
+        // Logro Inmediato: Estratega (Uso de comodín con éxito)
+        // Se otorga si el usuario tiene ese match_id en wildcard_used_match_id y ganó más de 0 puntos
+        $pdo->prepare("INSERT IGNORE INTO user_achievements (user_id, achievement_key) 
+                       SELECT user_id, 'strategist' FROM predictions 
+                       WHERE match_id = ? AND points_earned > 0 
+                       AND user_id IN (SELECT id FROM users WHERE wildcard_used_match_id = ?)")
+            ->execute([$match_id, $match_id]);
+
+        // Escanear logros complejos para todos los usuarios involucrados
+        $all_users = $pdo->query("SELECT id FROM users WHERE role = 'user'")->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($all_users as $uid) {
+            checkUserAchievements($pdo, $uid);
+        }
+        // =====================================================================
+
         $pdo->commit();
         
-        // Log de actividad
+        // Log de actividad y redirección
         $pdo->prepare("INSERT INTO admin_activity_log (action_type, description) VALUES ('match_close', ?)")
-            ->execute(["Calculados puntos e historial para partido ID $match_id."]);
+            ->execute(["Cerrado partido ID $match_id. Puntos, Ranking y Logros procesados."]);
 
-        // Redirección corregida (ajusta si tu archivo admin principal se llama diferente)
         header("Location: index.php?msg=success");
         exit;
 
