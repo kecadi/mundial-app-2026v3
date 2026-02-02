@@ -35,6 +35,7 @@ require_once 'includes/index_logic.php';
     <?php include 'includes/alerts.php'; ?>
     <?php include 'includes/index_ranking_cards.php'; ?>
     <?php include 'includes/index_rival_duel.php'; ?>
+    <?php include 'includes/index_global_chat.php'; ?>
     <?php include 'includes/index_quiz_section.php'; ?>
     <?php include 'includes/index_lock_alert.php'; ?>
     <?php include 'includes/index_progress_bar.php'; ?>
@@ -71,7 +72,16 @@ document.addEventListener('DOMContentLoaded', function() {
     <?php endif; ?>
 });
 </script>
-
+<button class="btn btn-primary shadow-lg rounded-circle position-fixed d-flex align-items-center justify-content-center" 
+        type="button" 
+        data-bs-toggle="offcanvas" 
+        data-bs-target="#offcanvasChat" 
+        style="bottom: 20px; right: 20px; width: 60px; height: 60px; z-index: 1050; border: 3px solid white;">
+    <i class="bi bi-chat-dots-fill fs-4"></i>
+    <span id="chatNotificationBadge" class="position-absolute top-0 start-100 translate-middle p-2 bg-danger border border-light rounded-circle" style="display: none;">
+        <span class="visually-hidden">Nuevos mensajes</span>
+    </span>
+</button>
 <?php include 'includes/index_logic.js'; ?>
 <?php include 'includes/footer.php'; ?>
 </body>
