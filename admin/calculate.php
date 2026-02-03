@@ -1,5 +1,5 @@
 <?php
-// admin/calculate.php (VERSIÓN CORREGIDA)
+// admin/calculate.php (VERSIÓN FINAL CON JERARQUÍA DE RETOS)
 session_start();
 require_once '../config/db.php'; 
 require_once '../includes/check_achievements.php';
@@ -18,57 +18,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $pdo->beginTransaction(); 
 
-        // 1. ACTUALIZAR PARTIDO
+        // 1. ACTUALIZAR EL RESULTADO DEL PARTIDO
         $pdo->prepare("UPDATE matches SET home_score = ?, away_score = ?, status = 'finished', real_qualifier_id = ? WHERE id = ?")
             ->execute([$real_home, $real_away, $real_qualifier_id, $match_id]);
 
-        // 2. CONFIGURACIÓN
+        // 2. CONFIGURACIÓN DE PUNTOS
         $is_knockout = ($match_phase !== 'group');
         $exact_pts   = $is_knockout ? 30 : 25;
         $winner_pts  = $is_knockout ? 20 : 15;
         $goal_pts    = 5;
-        $qualifier_bonus = 10;
-        $bonus_reto = 15; // Puntos extra por ganar el duelo
+        $qualifier_bonus = 25;
+        $bonus_reto = 15;
 
         // 3. CALCULAR PUNTOS BASE Y COMODÍN
         $stmt_preds = $pdo->prepare("SELECT user_id, predicted_home_score, predicted_away_score, predicted_qualifier_id FROM predictions WHERE match_id = ?");
         $stmt_preds->execute([$match_id]);
         $predictions = $stmt_preds->fetchAll(PDO::FETCH_ASSOC);
 
-        $final_points_to_save = []; 
+        $user_points_map = []; 
+        $user_predictions_data = []; // Guardamos datos para el paso de retos
 
         foreach ($predictions as $p) {
             $pts = 0;
-            $p_home = (int)$p['predicted_home_score'];
-            $p_away = (int)$p['predicted_away_score'];
-            $real_diff = $real_home - $real_away;
-            $pred_diff = $p_home - $p_away;
+            $p_h = (int)$p['predicted_home_score'];
+            $p_a = (int)$p['predicted_away_score'];
 
-            // Puntos por resultado
-            if ($p_home === $real_home && $p_away === $real_away) {
+            $real_diff = $real_home - $real_away;
+            $pred_diff = $p_h - $p_a;
+
+            // Determinar si acertó el signo (Ganador o Empate)
+            $acerto_signo = (($real_diff > 0 && $pred_diff > 0) || ($real_diff < 0 && $pred_diff < 0) || ($real_diff === 0 && $pred_diff === 0));
+
+            if ($p_h === $real_home && $p_a === $real_away) {
                 $pts = $exact_pts;
-            } elseif (($real_diff > 0 && $pred_diff > 0) || ($real_diff < 0 && $pred_diff < 0) || ($real_diff === 0 && $pred_diff === 0)) {
+            } elseif ($acerto_signo) {
                 $pts = $winner_pts;
-            } elseif ($p_home === $real_home || $p_away === $real_away) {
+            } elseif ($p_h === $real_home || $p_a === $real_away) {
                 $pts = $goal_pts;
             }
 
-            // Bonus clasificado
             if ($is_knockout && $real_qualifier_id && (int)$p['predicted_qualifier_id'] === (int)$real_qualifier_id) {
                 $pts += $qualifier_bonus;
             }
 
-            // APLICAR COMODÍN X2 (Antes de los retos para que el x2 sea sobre el partido)
+            // Aplicación Comodín x2
             $stmt_w = $pdo->prepare("SELECT COUNT(*) FROM users WHERE id = ? AND wildcard_used_match_id = ?");
             $stmt_w->execute([$p['user_id'], $match_id]);
             if ($stmt_w->fetchColumn() > 0) {
                 $pts *= 2;
             }
 
-            $final_points_to_save[$p['user_id']] = $pts;
+            $user_points_map[$p['user_id']] = $pts;
+            $user_predictions_data[$p['user_id']] = [
+                'h' => $p_h, 
+                'a' => $p_a, 
+                'signo' => $acerto_signo
+            ];
         }
 
-        // 4. PROCESAR RETOS (Sumar bonus a la precisión, NO robar puntos base)
+        // 4. PROCESAR DUELOS CON JERARQUÍA (Signo > Goles)
+        $updated_user_points = $user_points_map;
         $stmt_challenges = $pdo->prepare("SELECT * FROM match_challenges WHERE match_id = ? AND wager_status = 'PENDING'");
         $stmt_challenges->execute([$match_id]);
         $challenges = $stmt_challenges->fetchAll(PDO::FETCH_ASSOC);
@@ -77,21 +86,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $u1 = $ch['challenger_user_id'];
             $u2 = $ch['challenged_user_id'];
 
-            // Obtener predicciones para comparar precisión real
-            $p1 = $pdo->query("SELECT predicted_home_score as h, predicted_away_score as a FROM predictions WHERE user_id = $u1 AND match_id = $match_id")->fetch();
-            $p2 = $pdo->query("SELECT predicted_home_score as h, predicted_away_score as a FROM predictions WHERE user_id = $u2 AND match_id = $match_id")->fetch();
-
-            if ($p1 && $p2) {
-                $diff1 = abs($p1['h'] - $real_home) + abs($p1['a'] - $real_away);
-                $diff2 = abs($p2['h'] - $real_home) + abs($p2['a'] - $real_away);
-
+            if (isset($user_predictions_data[$u1]) && isset($user_predictions_data[$u2])) {
+                $d1 = $user_predictions_data[$u1];
+                $d2 = $user_predictions_data[$u2];
                 $ganador_duelo = null;
-                if ($diff1 < $diff2) $ganador_duelo = $u1;
-                elseif ($diff2 < $diff1) $ganador_duelo = $u2;
+
+                // Lógica de Jerarquía
+                if ($d1['signo'] && !$d2['signo']) {
+                    $ganador_duelo = $u1; // Solo U1 acertó el ganador
+                } elseif (!$d1['signo'] && $d2['signo']) {
+                    $ganador_duelo = $u2; // Solo U2 acertó el ganador
+                } else {
+                    // Ambos acertaron el signo o ambos fallaron: Decidimos por precisión de goles
+                    $diff1 = abs($d1['h'] - $real_home) + abs($d1['a'] - $real_away);
+                    $diff2 = abs($d2['h'] - $real_home) + abs($d2['a'] - $real_away);
+
+                    if ($diff1 < $diff2) $ganador_duelo = $u1;
+                    elseif ($diff2 < $diff1) $ganador_duelo = $u2;
+                }
 
                 if ($ganador_duelo) {
-                    // Sumamos el bonus del reto al mapa de puntos final
-                    $final_points_to_save[$ganador_duelo] += $bonus_reto;
+                    $updated_user_points[$ganador_duelo] += $bonus_reto;
                 }
 
                 $pdo->prepare("UPDATE match_challenges SET wager_status = 'PROCESSED', points_seized = ? WHERE id = ?")
@@ -99,10 +114,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        // 5. GUARDAR PUNTOS EN LA TABLA PREDICTIONS
+        // 5. GUARDADO DEFINITIVO
         $upd_pred = $pdo->prepare("UPDATE predictions SET points_earned = ? WHERE user_id = ? AND match_id = ?");
-        foreach ($final_points_to_save as $uid => $total_pts) {
-            $upd_pred->execute([$total_pts, $uid, $match_id]);
+        foreach ($updated_user_points as $uid => $total) {
+            $upd_pred->execute([$total, $uid, $match_id]);
         }
 
         // 6. GUARDAR HISTORIAL PARA EL GRÁFICO DEL PERFIL

@@ -47,8 +47,38 @@ if (!isset($_SESSION['user_id'])) {
             <hr>
             <p class="fw-bold text-danger"><i class="bi bi-exclamation-triangle-fill"></i> ¡Solo tienes UN Comodín x2 para todo el campeonato!</p>
             <ul>
-                <li><strong>Efecto Comodín:</strong> Duplica los puntos obtenidos en el partido seleccionado. Se recomienda usarlo en partidos donde estés muy seguro o donde el riesgo/beneficio sea alto (Fases Eliminatorias).</li>
-                <li><strong>⚔️ Duelos (Challenges):</strong> Solo puedes lanzar <strong>UN desafío por fase</strong> (Fase de Grupos, Octavos, Cuartos, Semifinales y Final). Al ganar un duelo, "robas" una parte de la bonificación del rival.</li>
+                <li><strong>Efecto Comodín:</strong> Duplica los puntos obtenidos en el partido seleccionado (se aplica antes que cualquier reto).</li>
+                <li><strong>⚔️ Duelos (Challenges):</strong> Puedes lanzar <strong>UN desafío por fase</strong>. 
+                    <ul>
+                        <li>Al ganar un duelo, sumas una <strong>bonificación de +15 puntos</strong> adicionales.</li>
+                        <li>El ganador se decide por <strong>estricta jerarquía</strong>:</li>
+                    </ul>
+                    
+                    <div class="table-responsive mt-2">
+                        <table class="table table-sm table-bordered text-center bg-white shadow-sm" style="font-size: 0.85rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Prioridad</th>
+                                    <th>Criterio</th>
+                                    <th>Explicación</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>1ª</td>
+                                    <td><strong>Signo (1X2)</strong></td>
+                                    <td>Si tú aciertas quién gana/empata y tu rival no, ganas el duelo automáticamente.</td>
+                                </tr>
+                                <tr>
+                                    <td>2ª</td>
+                                    <td><strong>Precisión</strong></td>
+                                    <td>Si ambos acertáis el signo, gana el que esté más cerca del marcador real (menos goles de diferencia).</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="small text-muted mt-2"><i class="bi bi-info-circle"></i> Nota: El rival nunca pierde sus puntos base del partido; el duelo es una competición por un premio extra.</p>
+                </li>
             </ul>
 
             <h4 class="rules-section-title">3. Sistema de Puntuación (Grupos vs Eliminatorias)</h4>
@@ -66,9 +96,9 @@ if (!isset($_SESSION['user_id'])) {
                     <p class="fw-bold text-success text-uppercase small">Eliminatorias (Acumulable en Empates)</p>
                     <ul class="list-unstyled">
                         <li><span class="badge bg-success">30 Pts</span> Resultado Exacto.</li>
-                        <li><span class="badge bg-info text-dark">25 Pts</span> Equipo que Clasifica.</li>
-                        <li><span class="badge bg-light text-dark border">10 Pts</span> Goles de un equipo.</li>
-                        <li><small class="text-muted">* Si aciertas un empate exacto y el clasificado, sumas 30 + 25 = 55 Pts.</small></li>
+                        <li><span class="badge bg-info text-dark">10 Pts</span> Equipo que Clasifica.</li>
+                        <li><span class="badge bg-light text-dark border">5 Pts</span> Goles de un equipo.</li>
+                        <li><small class="text-muted">* Si aciertas un empate exacto y el clasificado, sumas 30 + 10 = 40 Pts.</small></li>
                     </ul>
                 </div>
             </div>
