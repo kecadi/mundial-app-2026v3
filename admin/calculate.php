@@ -121,12 +121,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // 6. GUARDAR HISTORIAL PARA EL GRÁFICO DEL PERFIL
-        $sql_ranking_snap = "SELECT u.id, (COALESCE(T_MATCH.match_points, 0) + COALESCE(T_BONUS.bonus_points, 0) + COALESCE(T_QUIZ.quiz_points, 0)) AS total_actual
-            FROM users u
-            LEFT JOIN (SELECT user_id, SUM(points_earned) AS match_points FROM predictions GROUP BY user_id) T_MATCH ON u.id = T_MATCH.user_id
-            LEFT JOIN (SELECT user_id, SUM(points_awarded) AS bonus_points FROM group_ranking_points GROUP BY user_id) T_BONUS ON u.id = T_BONUS.user_id
-            LEFT JOIN (SELECT user_id, SUM(points_awarded) AS quiz_points FROM daily_quiz_responses GROUP BY user_id) T_QUIZ ON u.id = T_QUIZ.user_id
-            WHERE u.role != 'admin' ORDER BY total_actual DESC";
+        $sql_ranking_snap = "SELECT u.id, (
+            COALESCE(T_MATCH.match_points, 0) + 
+            COALESCE(T_GROUP.group_points, 0) + 
+            COALESCE(T_QUIZ.quiz_points, 0) +
+            COALESCE(T_ACHIEV.bonus_points, 0) -- <--- SUMAMOS LA NUEVA TABLA
+        ) AS total_actual
+        FROM users u
+        LEFT JOIN (SELECT user_id, SUM(points_earned) AS match_points FROM predictions GROUP BY user_id) T_MATCH ON u.id = T_MATCH.user_id
+        LEFT JOIN (SELECT user_id, SUM(points_awarded) AS group_points FROM group_ranking_points GROUP BY user_id) T_GROUP ON u.id = T_GROUP.user_id
+        LEFT JOIN (SELECT user_id, SUM(points_awarded) AS quiz_points FROM daily_quiz_responses GROUP BY user_id) T_QUIZ ON u.id = T_QUIZ.user_id
+        LEFT JOIN (SELECT user_id, SUM(points_awarded) AS bonus_points FROM achievement_bonus_points GROUP BY user_id) T_ACHIEV ON u.id = T_ACHIEV.user_id -- <--- JOIN NUEVO
+        WHERE u.role != 'admin'
+        ORDER BY total_actual DESC";
 
         $ranking_data = $pdo->query($sql_ranking_snap)->fetchAll(PDO::FETCH_ASSOC);
         $stmt_ins_history = $pdo->prepare("INSERT INTO ranking_history (user_id, match_id, points_at_moment, rank_at_moment) VALUES (?, ?, ?, ?)");

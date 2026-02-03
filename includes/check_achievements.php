@@ -34,3 +34,20 @@ function checkUserAchievements($pdo, $user_id) {
             ->execute([$user_id]);
     }
 }
+
+function checkUserAchievements($pdo, $user_id) {
+    // ... (lógica existente de logros) ...
+
+    // Contamos logros actuales
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM user_achievements WHERE user_id = ?");
+    $stmt->execute([$user_id]);
+    $total_ahora = $stmt->fetchColumn();
+
+    if ($total_ahora >= 5) {
+        // Intentamos insertar el bonus. Gracias al UNIQUE KEY en la DB, 
+        // si ya existe, el INSERT IGNORE o un bloque try-catch evitará el error.
+        $sql = "INSERT IGNORE INTO achievement_bonus_points (user_id, bonus_key, points_awarded) 
+                VALUES (?, 'full_collection_bonus', 50)";
+        $pdo->prepare($sql)->execute([$user_id]);
+    }
+}

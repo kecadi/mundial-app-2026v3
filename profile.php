@@ -156,6 +156,23 @@ foreach($history as $h) {
         </div>
     </div>
 
+    <?php
+    // Consultar si tiene el bonus en la nueva tabla
+    $stmt_bonus = $pdo->prepare("SELECT points_awarded FROM achievement_bonus_points WHERE user_id = ? AND bonus_key = 'full_collection_bonus'");
+    $stmt_bonus->execute([$user_id]);
+    $bonus_leyenda = $stmt_bonus->fetchColumn();
+    ?>
+
+    <?php if ($bonus_leyenda): ?>
+        <div class="alert alert-warning d-flex align-items-center rounded-4 border-0 shadow-sm mt-3">
+            <i class="bi bi-stars fs-4 me-3"></i>
+            <div>
+                <h6 class="mb-0 fw-bold">¡Bonus Leyenda Activado!</h6>
+                <small>Has sumado <strong>+<?php echo $bonus_leyenda; ?> puntos</strong> extra por completar tu colección.</small>
+            </div>
+        </div>
+    <?php endif; ?>
+
     <div class="row mb-4">
         <div class="col-12">
             <div class="card shadow-sm border-0 rounded-4">
