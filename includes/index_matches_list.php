@@ -83,7 +83,7 @@ foreach($partidos as $match) {
                 $es_eliminatoria = ($match['phase'] !== 'group');
 
                 // Lógica de Bloqueo
-                $minutos_bloqueo = 2; // Ajustado a 2 como en tus reglas
+                $minutos_bloqueo = 2; 
                 $tiempo_bloqueo_seg = $minutos_bloqueo * 60; 
                 $fecha_inicio = strtotime($match['match_date']);
                 $partido_bloqueado = (time() >= ($fecha_inicio - $tiempo_bloqueo_seg));
@@ -197,14 +197,48 @@ foreach($partidos as $match) {
                                     </div>
                                 </div>
                             </div>
-                        </div>
+
+                            <?php 
+                                $consenso = get_match_consenso($pdo, $match['match_id']); 
+                            ?>
+                            <?php if ($consenso['total'] > 0): ?>
+                            <div class="match-consenso-container mt-4 mb-2 px-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="text-white-50 fw-bold" style="font-size: 0.65rem; letter-spacing: 0.8px;">
+                                        <i class="bi bi-people-fill me-1"></i> CONSENSO (<?php echo $consenso['total']; ?> VOTOS)
+                                    </span>
+                                </div>
+                                
+                                <div class="progress shadow-sm" style="height: 8px; border-radius: 20px; background-color: rgba(255,255,255,0.2);">
+                                    <div class="progress-bar" role="progressbar" 
+                                         style="width: <?php echo $consenso['1']; ?>%; background-color: #0d6efd;" 
+                                         data-bs-toggle="tooltip" title="Gana Local: <?php echo $consenso['1']; ?>%">
+                                    </div>
+                                    <div class="progress-bar" role="progressbar" 
+                                         style="width: <?php echo $consenso['X']; ?>%; background-color: #adb5bd;" 
+                                         data-bs-toggle="tooltip" title="Empate: <?php echo $consenso['X']; ?>%">
+                                    </div>
+                                    <div class="progress-bar" role="progressbar" 
+                                         style="width: <?php echo $consenso['2']; ?>%; background-color: #dc3545;" 
+                                         data-bs-toggle="tooltip" title="Gana Visitante: <?php echo $consenso['2']; ?>%">
+                                    </div>
+                                </div>
+                                
+                                <div class="d-flex justify-content-between mt-1 px-1 fw-bold text-white" style="font-size: 0.65rem; opacity: 0.8;">
+                                    <span><?php echo $consenso['1']; ?>%</span>
+                                    <span><?php echo $consenso['X']; ?>%</span>
+                                    <span><?php echo $consenso['2']; ?>%</span>
+                                </div>
+                            </div>
+                            <?php endif; ?>
+                            </div>
 
                         <?php 
                             $match_comment_count = $comment_counts[$match['match_id']] ?? 0;
                             $puede_usar_comodin = $wildcard_available && !$partido_terminado && !$partido_bloqueado && $ya_pronosticado;
                             $mostrar_badge_activo = (!$wildcard_available && $wildcard_match_id == $match['match_id']);
                         ?>
-                        <div class="mt-3 d-flex justify-content-center flex-wrap gap-2">
+                        <div class="mt-2 d-flex justify-content-center flex-wrap gap-2">
                             <?php if ($puede_usar_comodin): ?>
                                 <form method="POST" action="save_wildcard.php" class="d-inline">
                                     <input type="hidden" name="match_id" value="<?php echo $match['match_id']; ?>">

@@ -12,12 +12,12 @@ $user_id = $_SESSION['user_id'];
 $error = '';
 $success = '';
 
-// 1. Obtener datos actuales del usuario (Incluyendo estadísticas)
+// 1. Obtener datos actuales del usuario
 $stmt_user = $pdo->prepare("SELECT nombre, email, created_at FROM users WHERE id = ?");
 $stmt_user->execute([$user_id]);
 $user_data = $stmt_user->fetch(PDO::FETCH_ASSOC);
 
-// 2. Lógica de Estadísticas rápidas para las tarjetas superiores
+// 2. Lógica de Estadísticas rápidas
 $stmt_stats = $pdo->prepare("SELECT 
     COUNT(*) as total_preds,
     SUM(CASE WHEN points_earned >= 25 THEN 1 ELSE 0 END) as exact_hits,
@@ -26,7 +26,20 @@ $stmt_stats = $pdo->prepare("SELECT
 $stmt_stats->execute([$user_id]);
 $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
 
-// 3. Procesar actualización de perfil (Formulario)
+// 3. LOGROS (Movido arriba para evitar errores de variable indefinida)
+$stmt_my_ach = $pdo->prepare("SELECT achievement_key FROM user_achievements WHERE user_id = ?");
+$stmt_my_ach->execute([$user_id]);
+$earned = $stmt_my_ach->fetchAll(PDO::FETCH_COLUMN);
+
+$ach_list = [
+    'hawk_eye'    => ['n' => 'Ojo de Halcón', 'i' => 'bi-eye-fill', 'c' => '#0d6efd', 'd' => 'Acertaste un resultado exacto'],
+    'strategist'  => ['n' => 'Estratega', 'i' => 'bi-lightning-charge-fill', 'c' => '#ffc107', 'd' => 'Puntos con el comodín x2'],
+    'loyal_fan'   => ['n' => 'Fiel Seguidor', 'i' => 'bi-calendar-check-fill', 'c' => '#198754', 'd' => 'Completaste todos los grupos'],
+    'quiz_master' => ['n' => 'Maestro Quiz', 'i' => 'bi-brain-fill', 'c' => '#6f42c1', 'd' => '3 aciertos seguidos en el Quiz'],
+    'giant_hunter'=> ['n' => 'Caza-Gigantes', 'i' => 'bi-trophy-fill', 'c' => '#dc3545', 'd' => 'Ganaste un duelo difícil']
+];
+
+// 4. Procesar actualización de perfil
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $new_name = trim($_POST['new_name']);
     $new_password = $_POST['new_password'];
@@ -62,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// 4. OBTENER DATOS PARA EL GRÁFICO DE EVOLUCIÓN
+// 5. OBTENER DATOS PARA EL GRÁFICO DE EVOLUCIÓN
 $stmt_h = $pdo->prepare("SELECT points_at_moment, rank_at_moment, recorded_at 
                          FROM ranking_history 
                          WHERE user_id = ? 
@@ -70,9 +83,7 @@ $stmt_h = $pdo->prepare("SELECT points_at_moment, rank_at_moment, recorded_at
 $stmt_h->execute([$user_id]);
 $history = $stmt_h->fetchAll(PDO::FETCH_ASSOC);
 
-$labels = [];
-$puntos = [];
-$posiciones = [];
+$labels = []; $puntos = []; $posiciones = [];
 foreach($history as $h) {
     $labels[] = date('d/m', strtotime($h['recorded_at']));
     $puntos[] = $h['points_at_moment'];
@@ -92,7 +103,6 @@ foreach($history as $h) {
         .profile-header { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); color: white; border-radius: 15px; }
         .stat-card { transition: transform 0.3s; border: none; }
         .stat-card:hover { transform: translateY(-5px); }
-        /* Estilos de Medallas */
         .medal-icon {
             width: 70px; height: 70px; border-radius: 50%; display: flex; align-items: center; 
             justify-content: center; margin: 0 auto; font-size: 1.8rem; transition: all 0.3s;
@@ -146,28 +156,38 @@ foreach($history as $h) {
         </div>
     </div>
 
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-body py-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="small fw-bold text-muted text-uppercase">Progreso de Coleccionista</span>
+                        <span class="badge bg-primary">
+                            <?php echo count($earned); ?> / <?php echo count($ach_list); ?> Logros
+                        </span>
+                    </div>
+                    <div class="progress" style="height: 12px; border-radius: 10px; background-color: #e9ecef;">
+                        <?php 
+                            $total_logros = count($ach_list);
+                            $porcentaje = ($total_logros > 0) ? (count($earned) / $total_logros) * 100 : 0; 
+                        ?>
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning" 
+                             role="progressbar" 
+                             style="width: <?php echo $porcentaje; ?>%">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="card shadow-sm border-0 mb-4 rounded-4">
         <div class="card-header bg-white py-3 border-0">
             <h5 class="mb-0 fw-bold text-dark"><i class="bi bi-award-fill text-warning me-2"></i>Mis Condecoraciones</h5>
         </div>
         <div class="card-body">
             <div class="row g-4 justify-content-center">
-                <?php
-                // Obtener logros conseguidos desde la DB
-                $stmt_my_ach = $pdo->prepare("SELECT achievement_key FROM user_achievements WHERE user_id = ?");
-                $stmt_my_ach->execute([$user_id]);
-                $earned = $stmt_my_ach->fetchAll(PDO::FETCH_COLUMN);
-
-                // Catálogo maestro de logros
-                $ach_list = [
-                    'hawk_eye'    => ['n' => 'Ojo de Halcón', 'i' => 'bi-eye-fill', 'c' => '#0d6efd', 'd' => 'Acertaste un resultado exacto'],
-                    'strategist'  => ['n' => 'Estratega', 'i' => 'bi-lightning-charge-fill', 'c' => '#ffc107', 'd' => 'Puntos con el comodín x2'],
-                    'loyal_fan'   => ['n' => 'Fiel Seguidor', 'i' => 'bi-calendar-check-fill', 'c' => '#198754', 'd' => 'Completaste todos los grupos'],
-                    'quiz_master' => ['n' => 'Maestro Quiz', 'i' => 'bi-brain-fill', 'c' => '#6f42c1', 'd' => '3 aciertos seguidos en el Quiz'],
-                    'giant_hunter'=> ['n' => 'Caza-Gigantes', 'i' => 'bi-trophy-fill', 'c' => '#dc3545', 'd' => 'Ganaste un duelo difícil']
-                ];
-
-                foreach ($ach_list as $key => $info):
+                <?php foreach ($ach_list as $key => $info):
                     $has_it = in_array($key, $earned);
                 ?>
                 <div class="col-4 col-md-2 text-center">
@@ -243,13 +263,13 @@ foreach($history as $h) {
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    // 1. Tooltips de Bootstrap
+    // Tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl)
     });
 
-    // 2. Gráfico de Evolución
+    // Gráfico
     <?php if (!empty($history)): ?>
     const ctx = document.getElementById('evolutionChart').getContext('2d');
     new Chart(ctx, {

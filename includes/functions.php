@@ -110,3 +110,30 @@ function get_phase_points(array $points_map, string $phase_name): int {
     // Usamos ?? 0 para manejar el caso en que la clave no exista.
     return (int)($points_map[$phase_name] ?? 0);
 }
+
+/**
+ * Calcula el consenso (1X2) de los usuarios para un partido.
+ */
+function get_match_consenso($pdo, $match_id) {
+    $stmt = $pdo->prepare("SELECT predicted_home_score, predicted_away_score FROM predictions WHERE match_id = ?");
+    $stmt->execute([$match_id]);
+    $preds = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $total = count($preds);
+    if ($total === 0) return ['1' => 0, 'X' => 0, '2' => 0, 'total' => 0];
+
+    $votos = ['1' => 0, 'X' => 0, '2' => 0];
+
+    foreach ($preds as $p) {
+        if ($p['predicted_home_score'] > $p['predicted_away_score']) $votos['1']++;
+        elseif ($p['predicted_home_score'] < $p['predicted_away_score']) $votos['2']++;
+        else $votos['X']++;
+    }
+
+    return [
+        '1' => round(($votos['1'] / $total) * 100),
+        'X' => round(($votos['X'] / $total) * 100),
+        '2' => round(($votos['2'] / $total) * 100),
+        'total' => $total
+    ];
+}
