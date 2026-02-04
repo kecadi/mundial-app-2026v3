@@ -70,6 +70,15 @@ document.addEventListener('DOMContentLoaded', function() {
             );
         }, 4500); // Aparece a los 4.5 segundos para no solaparse con la anterior
     <?php endif; ?>
+
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl, {
+            html: true // <--- ESTA LÍNEA ES VITAL
+        })
+    });
+
+
 });
 </script>
 <button class="btn btn-primary shadow-lg rounded-circle position-fixed d-flex align-items-center justify-content-center" 

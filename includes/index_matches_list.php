@@ -111,92 +111,117 @@ foreach($partidos as $match) {
                         </div>
                         
                         <div class="card-body p-0">
-                            <div class="row align-items-center text-white text-center">
-                                <div class="col-4">
-                                    <img src="assets/img/banderas/<?php echo $match['home_flag']; ?>.png" 
-                                         class="shadow-sm mb-2" style="width: 45px; border-radius: 5px;">
-                                    <h6 class="fw-bold mb-1 text-truncate"><?php echo $match['home_name']; ?></h6>
-                                    
-                                    <div class="d-flex justify-content-center gap-1 mt-1">
-                                        <?php 
-                                        $home_players = explode(',', $match['home_players'] ?? '');
-                                        foreach(array_slice($home_players, 0, 2) as $p_name): 
-                                            $p_name = trim($p_name);
-                                            if(!empty($p_name)):
-                                                $ruta_p = "assets/img/players/" . $p_name . ".png";
-                                                $p_img = file_exists($ruta_p) ? $ruta_p : "assets/img/players/default_player.png";
-                                        ?>
-                                            <img src="<?php echo $p_img; ?>" class="rounded-circle border border-white" style="width: 24px; height: 24px; object-fit: cover;" title="<?php echo htmlspecialchars($p_name); ?>">
-                                        <?php endif; endforeach; ?>
-                                    </div>
-                                </div>
+<div class="row align-items-center text-white text-center">
+    <div class="col-4">
+        <img src="assets/img/banderas/<?php echo $match['home_flag']; ?>.png" 
+             class="shadow-sm mb-2" style="width: 45px; border-radius: 5px;">
+        <h6 class="fw-bold mb-1 text-truncate"><?php echo $match['home_name']; ?></h6>
+        
+        <div class="mt-2">
+            <?php if(!empty($match['home_star_name'])): 
+                // Usamos el ID para la imagen (más seguro)
+                $p_img_home = "assets/img/players/" . $match['home_star_id'] . ".png";
+                if(!file_exists($p_img_home)) $p_img_home = "assets/img/players/default_player.png";
+            ?>
+                <div class="position-relative d-inline-block" 
+                     data-bs-toggle="tooltip" data-bs-html="true" 
+                     title="<b><?php echo htmlspecialchars($match['home_star_name']); ?></b><br>Club: <?php echo htmlspecialchars($match['home_star_club'] ?? 'N/A'); ?><br>Goles: <?php echo $match['home_star_goals'] ?? 0; ?>">
+                    
+                    <img src="<?php echo $p_img_home; ?>" class="rounded-circle border border-2 border-white player-avatar shadow" 
+                         style="width: 38px; height: 38px; object-fit: cover;">
+                    
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-light" style="font-size: 0.6rem;">
+                        <?php echo $match['home_star_goals'] ?? 0; ?>⚽
+                    </span>
+                </div>
+                <div class="small mt-1 fw-bold" style="font-size: 0.65rem; opacity: 0.9;">
+                    <?php echo explode(' ', $match['home_star_name'])[0]; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
 
-                                <div class="col-4">
-                                    <?php 
-                                        $rival_by_me_name = $user_name_map[$match['rival_id_by_me']] ?? '';
-                                        $rival_me_name = $user_name_map[$match['rival_id_me']] ?? '';
-                                    ?>
+    <div class="col-4">
+        <?php 
+            $rival_by_me_name = $user_name_map[$match['rival_id_by_me']] ?? '';
+            $rival_me_name = $user_name_map[$match['rival_id_me']] ?? '';
+        ?>
 
-                                    <?php if ($match['challenged_by_me_id']): ?>
-                                        <div class="badge bg-primary mb-2 w-100 text-truncate" title="Retaste a <?php echo $rival_by_me_name; ?>">⚔️ vs <?php echo $rival_by_me_name; ?></div>
-                                    <?php elseif ($match['challenged_me_id']): ?>
-                                        <div class="badge bg-danger mb-2 w-100 text-truncate" title="Retado por <?php echo $rival_me_name; ?>">⚔️ vs <?php echo $rival_me_name; ?></div>
-                                    <?php endif; ?>
+        <?php if ($match['challenged_by_me_id']): ?>
+            <div class="badge bg-primary mb-2 w-100 text-truncate" title="Retaste a <?php echo $rival_by_me_name; ?>">⚔️ vs <?php echo $rival_by_me_name; ?></div>
+        <?php elseif ($match['challenged_me_id']): ?>
+            <div class="badge bg-danger mb-2 w-100 text-truncate" title="Retado por <?php echo $rival_me_name; ?>">⚔️ vs <?php echo $rival_me_name; ?></div>
+        <?php endif; ?>
 
-                                    <?php if($partido_terminado): ?>
-                                        <div class="mb-1 small opacity-75">Final</div>
-                                        <h3 class="fw-bold mb-0"><?php echo $match['real_home']; ?>-<?php echo $match['real_away']; ?></h3>
-                                        <?php if($ya_pronosticado): ?>
-                                            <span class="badge bg-success mt-1">+<?php echo $match['points_earned']; ?> pts</span>
-                                            <div class="small mt-1">(Tú: <?php echo $match['predicted_home_score']; ?>-<?php echo $match['predicted_away_score']; ?>)</div>
-                                        <?php endif; ?>
-                                    <?php else: ?>
-                                        <?php if($ya_pronosticado): ?>
-                                            <div class="badge bg-success mb-1">Tu apuesta</div>
-                                            <h4 class="text-warning fw-bold mb-1"><?php echo $match['predicted_home_score']; ?>-<?php echo $match['predicted_away_score']; ?></h4>
-                                            <button class="btn btn-sm btn-outline-light btn-predict px-3" 
-                                                    data-id="<?php echo $match['match_id']; ?>" 
-                                                    data-home="<?php echo $match['home_name']; ?>" 
-                                                    data-away="<?php echo $match['away_name']; ?>" 
-                                                    data-score-home="<?php echo $match['predicted_home_score']; ?>" 
-                                                    data-score-away="<?php echo $match['predicted_away_score']; ?>" 
-                                                    data-phase="<?php echo $match['phase']; ?>" 
-                                                    data-home-id="<?php echo $match['team_home_id']; ?>" 
-                                                    data-away-id="<?php echo $match['team_away_id']; ?>" 
-                                                    <?php echo $disable_button ? 'disabled' : ''; ?>>Editar</button>
-                                        <?php else: ?>
-                                            <h3 class="fw-bold mb-2">VS</h3>
-                                            <button class="btn btn-sm btn-primary btn-predict shadow-sm px-3" 
-                                                    data-id="<?php echo $match['match_id']; ?>" 
-                                                    data-home="<?php echo $match['home_name']; ?>" 
-                                                    data-away="<?php echo $match['away_name']; ?>" 
-                                                    data-phase="<?php echo $match['phase']; ?>" 
-                                                    data-home-id="<?php echo $match['team_home_id']; ?>" 
-                                                    data-away-id="<?php echo $match['team_away_id']; ?>" 
-                                                    <?php echo $disable_button ? 'disabled' : ''; ?>>Apostar</button>
-                                        <?php endif; ?>
-                                    <?php endif; ?>
-                                </div>
+        <?php if($partido_terminado): ?>
+            <div class="mb-1 small opacity-75 text-uppercase" style="font-size: 0.6rem; letter-spacing: 1px;">Finalizado</div>
+            <h3 class="fw-bold mb-0"><?php echo $match['real_home']; ?>-<?php echo $match['real_away']; ?></h3>
+            
+            <?php if($ya_pronosticado): ?>
+                <span class="badge bg-success mt-1">+<?php echo $match['points_earned']; ?> pts</span>
+                <div class="small mt-1" style="font-size: 0.7rem;">Tú: <?php echo $match['predicted_home_score']; ?>-<?php echo $match['predicted_away_score']; ?></div>
+            <?php endif; ?>
 
-                                <div class="col-4">
-                                    <img src="assets/img/banderas/<?php echo $match['away_flag']; ?>.png" 
-                                         class="shadow-sm mb-2" style="width: 45px; border-radius: 5px;">
-                                    <h6 class="fw-bold mb-1 text-truncate"><?php echo $match['away_name']; ?></h6>
-                                    
-                                    <div class="d-flex justify-content-center gap-1 mt-1">
-                                        <?php 
-                                        $away_players = explode(',', $match['away_players'] ?? '');
-                                        foreach(array_slice($away_players, 0, 2) as $p_name): 
-                                            $p_name = trim($p_name);
-                                            if(!empty($p_name)):
-                                                $ruta_v = "assets/img/players/" . $p_name . ".png";
-                                                $p_img = file_exists($ruta_v) ? $ruta_v : "assets/img/players/default_player.png";
-                                        ?>
-                                            <img src="<?php echo $p_img; ?>" class="rounded-circle border border-white" style="width: 24px; height: 24px; object-fit: cover;" title="<?php echo htmlspecialchars($p_name); ?>">
-                                        <?php endif; endforeach; ?>
-                                    </div>
-                                </div>
-                            </div>
+        <?php else: ?>
+            <?php if($ya_pronosticado): ?>
+                <div class="badge bg-success mb-1" style="font-size: 0.6rem;">Tu Pronóstico</div>
+                <h4 class="text-warning fw-bold mb-2"><?php echo $match['predicted_home_score']; ?>-<?php echo $match['predicted_away_score']; ?></h4>
+                <button class="btn btn-sm btn-outline-light btn-predict px-3" 
+                        data-id="<?php echo $match['match_id']; ?>" 
+                        data-home="<?php echo htmlspecialchars($match['home_name']); ?>" 
+                        data-away="<?php echo htmlspecialchars($match['away_name']); ?>" 
+                        data-score-home="<?php echo $match['predicted_home_score']; ?>" 
+                        data-score-away="<?php echo $match['predicted_away_score']; ?>" 
+                        data-phase="<?php echo $match['phase']; ?>" 
+                        data-home-id="<?php echo $match['team_home_id']; ?>" 
+                        data-away-id="<?php echo $match['team_away_id']; ?>" 
+                        <?php echo $disable_button ? 'disabled' : ''; ?>>
+                    <i class="bi bi-pencil-square"></i> Editar
+                </button>
+            <?php else: ?>
+                <h3 class="fw-bold mb-2">VS</h3>
+                <button class="btn btn-sm btn-primary btn-predict shadow-sm px-4 fw-bold" 
+                        data-id="<?php echo $match['match_id']; ?>" 
+                        data-home="<?php echo htmlspecialchars($match['home_name']); ?>" 
+                        data-away="<?php echo htmlspecialchars($match['away_name']); ?>" 
+                        data-phase="<?php echo $match['phase']; ?>" 
+                        data-home-id="<?php echo $match['team_home_id']; ?>" 
+                        data-away-id="<?php echo $match['team_away_id']; ?>" 
+                        <?php echo $disable_button ? 'disabled' : ''; ?>>
+                    APOSTAR
+                </button>
+            <?php endif; ?>
+        <?php endif; ?>
+    </div>
+
+    <div class="col-4">
+        <img src="assets/img/banderas/<?php echo $match['away_flag']; ?>.png" 
+             class="shadow-sm mb-2" style="width: 45px; border-radius: 5px;">
+        <h6 class="fw-bold mb-1 text-truncate"><?php echo $match['away_name']; ?></h6>
+        
+        <div class="mt-2">
+            <?php if(!empty($match['away_star_name'])): 
+                $p_img_away = "assets/img/players/" . $match['away_star_id'] . ".png";
+                if(!file_exists($p_img_away)) $p_img_away = "assets/img/players/default_player.png";
+            ?>
+                <div class="position-relative d-inline-block" 
+                     data-bs-toggle="tooltip" data-bs-html="true" 
+                     title="<b><?php echo htmlspecialchars($match['away_star_name']); ?></b><br>Club: <?php echo htmlspecialchars($match['away_star_club'] ?? 'N/A'); ?><br>Goles: <?php echo $match['away_star_goals'] ?? 0; ?>">
+                    
+                    <img src="<?php echo $p_img_away; ?>" class="rounded-circle border border-2 border-white player-avatar shadow" 
+                         style="width: 38px; height: 38px; object-fit: cover;">
+                    
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-light" style="font-size: 0.6rem;">
+                        <?php echo $match['away_star_goals'] ?? 0; ?>⚽
+                    </span>
+                </div>
+                <div class="small mt-1 fw-bold" style="font-size: 0.65rem; opacity: 0.9;">
+                    <?php echo explode(' ', $match['away_star_name'])[0]; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
 
                             <?php 
                                 $consenso = get_match_consenso($pdo, $match['match_id']); 

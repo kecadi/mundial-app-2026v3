@@ -82,9 +82,47 @@ $fase_activa = $_GET['fase'] ?? 'group';
 $nombres_fases = ['group' => 'Fase de Grupos', 'round_32' => 'Dieciseisavos', 'round_16' => 'Octavos', 'quarter' => 'Cuartos', 'semi' => 'Semifinales', 'final' => 'Gran Final'];
 if (!array_key_exists($fase_activa, $nombres_fases)) $fase_activa = 'group';
 
-$sql_partidos = "SELECT m.id as match_id, m.match_date, m.stadium, m.phase, m.status, m.home_score as real_home, m.away_score as real_away, m.team_home_id, m.team_away_id, t1.name as home_name, t1.flag as home_flag, t1.key_players AS home_players, t1.group_name, t2.name as away_name, t2.flag as away_flag, t2.key_players AS away_players, p.predicted_home_score, p.predicted_away_score, p.points_earned, p.predicted_qualifier_id, s.image_url, mc_by_me.id AS challenged_by_me_id, mc_challenged_me.id AS challenged_me_id, mc_by_me.challenged_user_id AS rival_id_by_me, mc_challenged_me.challenger_user_id AS rival_id_me 
-FROM matches m JOIN teams t1 ON m.team_home_id = t1.id JOIN teams t2 ON m.team_away_id = t2.id LEFT JOIN predictions p ON m.id = p.match_id AND p.user_id = :uid LEFT JOIN stadiums s ON m.stadium = s.name LEFT JOIN match_challenges mc_by_me ON m.id = mc_by_me.match_id AND mc_by_me.challenger_user_id = :uid LEFT JOIN match_challenges mc_challenged_me ON m.id = mc_challenged_me.match_id AND mc_challenged_me.challenged_user_id = :uid 
-WHERE m.phase = :fase ORDER BY m.match_date ASC";
+$sql_partidos = "SELECT 
+    m.id as match_id, m.match_date, m.stadium, m.phase, m.status, 
+    m.home_score as real_home, m.away_score as real_away, 
+    m.team_home_id, m.team_away_id, 
+    t1.name as home_name, t1.flag as home_flag, t1.group_name,
+    t2.name as away_name, t2.flag as away_flag,
+    p.predicted_home_score, p.predicted_away_score, p.points_earned, p.predicted_qualifier_id, 
+    s.image_url, 
+    mc_by_me.id AS challenged_by_me_id, mc_challenged_me.id AS challenged_me_id, 
+    mc_by_me.challenged_user_id AS rival_id_by_me, mc_challenged_me.challenger_user_id AS rival_id_me,
+    
+    -- DATOS JUGADOR ESTRELLA LOCAL (Incluimos ID para la imagen)
+    hp.id as home_star_id,
+    hp.name as home_star_name, 
+    hp.goals as home_star_goals, 
+    hp.club as home_star_club, 
+    hp.position as home_star_pos,
+    
+    -- DATOS JUGADOR ESTRELLA VISITANTE (Incluimos ID para la imagen)
+    ap.id as away_star_id,
+    ap.name as away_star_name, 
+    ap.goals as away_star_goals, 
+    ap.club as away_star_club, 
+    ap.position as away_star_pos
+
+FROM matches m 
+JOIN teams t1 ON m.team_home_id = t1.id 
+JOIN teams t2 ON m.team_away_id = t2.id 
+LEFT JOIN predictions p ON m.id = p.match_id AND p.user_id = :uid 
+LEFT JOIN stadiums s ON m.stadium = s.name 
+LEFT JOIN match_challenges mc_by_me ON m.id = mc_by_me.match_id AND mc_by_me.challenger_user_id = :uid 
+LEFT JOIN match_challenges mc_challenged_me ON m.id = mc_challenged_me.match_id AND mc_challenged_me.challenged_user_id = :uid 
+
+-- JOIN PARA EL JUGADOR ESTRELLA LOCAL
+LEFT JOIN players hp ON (t1.id = hp.team_id AND hp.is_star = 1)
+
+-- JOIN PARA EL JUGADOR ESTRELLA VISITANTE
+LEFT JOIN players ap ON (t2.id = ap.team_id AND ap.is_star = 1)
+
+WHERE m.phase = :fase 
+ORDER BY m.match_date ASC";
 $stmt = $pdo->prepare($sql_partidos);
 $stmt->execute(['uid' => $user_id, 'fase' => $fase_activa]);
 $partidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
